@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="128" fill="#0f172a" />
+  
+  <!-- Outer Sync Ring -->
+  <path d="M 256,60 A 196,196 0 0,1 452,256 A 196,196 0 0,1 360,420" fill="none" stroke="url(#grad2)" stroke-width="24" stroke-linecap="round" stroke-dasharray="10 15" />
+  <path d="M 256,452 A 196,196 0 0,1 60,256 A 196,196 0 0,1 152,92" fill="none" stroke="url(#grad2)" stroke-width="24" stroke-linecap="round" stroke-dasharray="10 15" />
+  
+  <!-- Leaf/Seedling in center representing crops/agriculture -->
+  <g transform="translate(186, 156)">
+    <!-- Soil mound -->
+    <path d="M 20,200 Q 70,180 120,200 T 220,200" fill="none" stroke="#78350f" stroke-width="16" stroke-linecap="round" />
+    <!-- Plant stem -->
+    <path d="M 70,200 Q 70,120 100,60" fill="none" stroke="url(#grad1)" stroke-width="16" stroke-linecap="round" />
+    <path d="M 70,200 Q 80,110 120,50" fill="none" stroke="url(#grad1)" stroke-width="12" stroke-linecap="round" />
+    <!-- Left leaf -->
+    <path d="M 70,140 Q 20,110 40,70 Q 75,90 75,130 Z" fill="url(#grad1)" />
+    <!-- Right leaf -->
+    <path d="M 85,110 Q 140,80 130,40 Q 95,65 92,100 Z" fill="url(#grad1)" />
+  </g>
+  
+  <!-- Small clouds / Signal indicator -->
+  <path d="M 380,180 A 25,25 0 0,1 425,190 A 20,20 0 0,1 440,210 A 15,15 0 0,1 430,225 L 370,225 A 15,15 0 0,1 360,210 A 20,20 0 0,1 380,180" fill="#475569" opacity="0.6" />
+</svg>
