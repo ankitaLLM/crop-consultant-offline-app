@@ -59,8 +59,8 @@ window.TERRASYNC_CONFIG = {
   // Replace with your restricted Google Maps API key
   googleMapsApiKey: 'AIzaSyYourRestrictedApiKeyHere',
 
-  // Optional: customize default center [latitude, longitude]
-  defaultCenter: [41.5908, -93.6208], // Central Iowa
+  // Optional: customize default center as a Google LatLngLiteral
+  defaultCenter: { lat: 41.5908, lng: -93.6208 }, // Central Iowa
   defaultZoom: 14,
 
   // Map type preferences

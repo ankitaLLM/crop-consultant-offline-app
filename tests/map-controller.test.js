@@ -14,6 +14,7 @@ class MockAdapter extends MapAdapter {
     this.location = null;
     this.track = [];
     this.followLocation = false;
+    this.visualizationLayer = null;
 
     this.fieldSelectedCb = null;
     this.clickCb = null;
@@ -32,6 +33,7 @@ class MockAdapter extends MapAdapter {
   setTrack(tr) { this.track = tr; }
   fitToField(id) { this.fittedFieldId = id; }
   setFollowLocation(f) { this.followLocation = f; }
+  setVisualizationLayer(layer) { this.visualizationLayer = layer; }
   onFieldSelected(cb) { this.fieldSelectedCb = cb; }
   onMapClick(cb) { this.clickCb = cb; }
   onMapPanned(cb) { this.pannedCb = cb; }
@@ -174,5 +176,25 @@ test('MapController: forwards events (fieldSelected, mapClick, mapPanned)', asyn
   controller.activeAdapter.pannedCb();
   assert.equal(panned, true);
 
+  controller.destroy();
+});
+
+test('MapController: connectivity override switches adapters and preserves layer state', async () => {
+  const controller = new MapController({
+    googleMapsApiKey: 'TEST_KEY_123',
+    isOnline: true,
+    GoogleMapAdapterClass: MockGoogleAdapter,
+    OfflineFieldAdapterClass: MockOfflineAdapter
+  });
+  await controller.init({ id: 'map' });
+  controller.setVisualizationLayer('ndvi');
+
+  await controller.setConnectivityState(false);
+  assert.equal(controller.getActiveAdapterType(), 'offline');
+  assert.equal(controller.activeAdapter.visualizationLayer, 'ndvi');
+
+  await controller.setConnectivityState(true);
+  assert.equal(controller.getActiveAdapterType(), 'google');
+  assert.equal(controller.activeAdapter.visualizationLayer, 'ndvi');
   controller.destroy();
 });

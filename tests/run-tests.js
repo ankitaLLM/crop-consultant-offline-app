@@ -9,15 +9,15 @@ const path = require('path');
 const testFiles = [
   path.join(__dirname, 'geometry.test.js'),
   path.join(__dirname, 'location-service.test.js'),
-  path.join(__dirname, 'map-controller.test.js')
+  path.join(__dirname, 'map-controller.test.js'),
+  path.join(__dirname, 'release-integrity.test.js')
 ];
 
 console.log('Running TerraSync Unit Tests:');
 testFiles.forEach(file => console.log(`  - ${path.basename(file)}`));
 
 const result = spawnSync('node', ['--test', ...testFiles], {
-  stdio: 'inherit',
-  shell: true
+  stdio: 'inherit'
 });
 
-process.exit(result.status || 0);
+process.exit(result.status ?? 1);

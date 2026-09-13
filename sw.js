@@ -1,24 +1,26 @@
 // Versioned, scope-specific shell. Never cache arbitrary APIs, Google Maps, or other Pages apps.
 const PREFIX = `terrasync-${encodeURIComponent(self.registration.scope)}-`;
-const CACHE = `${PREFIX}v6`;
+const CACHE = `${PREFIX}v7`;
 const CORE = [
   './',
   './index.html',
-  './style.css?v=6',
-  './src/config.js?v=6',
-  './src/geo/geometry.js?v=6',
-  './src/location/location-service.js?v=6',
-  './src/maps/map-adapter.js?v=6',
-  './src/maps/offline-field-adapter.js?v=6',
-  './src/maps/google-map-adapter.js?v=6',
-  './src/maps/map-controller.js?v=6',
-  './src/db.js?v=6',
-  './src/drafts.js?v=6',
-  './src/app.js?v=6',
+  './style.css?v=7',
+  './src/config.js?v=7',
+  './src/geo/geometry.js?v=7',
+  './src/location/location-service.js?v=7',
+  './src/maps/map-adapter.js?v=7',
+  './src/maps/offline-field-adapter.js?v=7',
+  './src/maps/google-map-adapter.js?v=7',
+  './src/maps/map-controller.js?v=7',
+  './src/db.js?v=7',
+  './src/drafts.js?v=7',
+  './src/app.js?v=7',
   './src/data.js',
   './manifest.json',
   './assets/icon.svg',
-  './assets/offline-tile-placeholder.svg'
+  './assets/offline-tile-placeholder.svg',
+  './terms.html',
+  './privacy.html'
 ];
 const CORE_URLS = new Set(CORE.map(path => new URL(path, self.registration.scope).href));
 const LEAFLET = ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',

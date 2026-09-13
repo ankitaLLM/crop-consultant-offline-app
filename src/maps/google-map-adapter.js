@@ -56,27 +56,44 @@
     googleLoadingPromise = new Promise((resolve, reject) => {
       const callbackName = `__terrasync_google_maps_loaded_${Date.now()}`;
       let timeoutTimer = null;
+      let script = null;
+      let settled = false;
 
       // Handle global auth failure callback from Google Maps API
       const prevAuthFailure = window.gm_authFailure;
-      window.gm_authFailure = () => {
-        if (typeof prevAuthFailure === 'function') prevAuthFailure();
-        reject(new Error('Google Maps authentication failed (invalid key or unauthorized referrer).'));
+      const restoreAuthFailure = () => {
+        if (window.gm_authFailure === authFailure) window.gm_authFailure = prevAuthFailure;
       };
-
-      window[callbackName] = () => {
+      const fail = error => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeoutTimer);
         delete window[callbackName];
+        restoreAuthFailure();
+        script?.remove();
+        googleLoadingPromise = null;
+        reject(error);
+      };
+      const authFailure = () => {
+        if (typeof prevAuthFailure === 'function') prevAuthFailure();
+        fail(new Error('Google Maps authentication failed (invalid key or unauthorized referrer).'));
+      };
+      window.gm_authFailure = authFailure;
+
+      window[callbackName] = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutTimer);
+        delete window[callbackName];
+        restoreAuthFailure();
         resolve(window.google.maps);
       };
 
       timeoutTimer = setTimeout(() => {
-        delete window[callbackName];
-        googleLoadingPromise = null;
-        reject(new Error('Google Maps script loading timed out.'));
+        fail(new Error('Google Maps script loading timed out.'));
       }, timeoutMs);
 
-      const script = document.createElement('script');
+      script = document.createElement('script');
       script.type = 'text/javascript';
       script.async = true;
       script.defer = true;
@@ -87,10 +104,7 @@
       script.src = src;
 
       script.onerror = () => {
-        clearTimeout(timeoutTimer);
-        delete window[callbackName];
-        googleLoadingPromise = null;
-        reject(new Error('Failed to load Google Maps JavaScript API (network error or blocked script).'));
+        fail(new Error('Failed to load Google Maps JavaScript API (network error or blocked script).'));
       };
 
       document.head.appendChild(script);
@@ -112,6 +126,8 @@
       this.fields = [];
       this.selectedFieldId = null;
       this.polygons = new Map(); // fieldId -> google.maps.Polygon
+      this.fieldLabelMarkers = [];
+      this.visualizationLayer = null;
 
       this.observations = [];
       this.observationMarkers = [];
@@ -196,21 +212,23 @@
         polygon.setMap(null);
       }
       this.polygons.clear();
+      for (const marker of this.fieldLabelMarkers) marker.setMap(null);
+      this.fieldLabelMarkers = [];
 
       for (const field of this.fields) {
         if (!Array.isArray(field.polygon) || field.polygon.length < 3) continue;
 
         const path = field.polygon.map(([lat, lng]) => ({ lat, lng }));
-        const color = CROP_COLORS[field.crop] || '#3b82f6';
         const isSelected = field.id === this.selectedFieldId;
+        const style = this._fieldStyle(field, isSelected);
 
         const polygon = new window.google.maps.Polygon({
           paths: path,
-          strokeColor: isSelected ? '#10b981' : '#4b5563',
+          strokeColor: style.strokeColor,
           strokeOpacity: 0.9,
           strokeWeight: isSelected ? 3.5 : 2,
-          fillColor: isSelected ? '#10b981' : color,
-          fillOpacity: isSelected ? 0.35 : 0.15,
+          fillColor: style.fillColor,
+          fillOpacity: style.fillOpacity,
           map: this.map,
           zIndex: isSelected ? 10 : 1
         });
@@ -223,6 +241,18 @@
         });
 
         this.polygons.set(field.id, polygon);
+
+        const center = path.reduce((sum, point) => ({ lat: sum.lat + point.lat, lng: sum.lng + point.lng }), { lat: 0, lng: 0 });
+        center.lat /= path.length;
+        center.lng /= path.length;
+        this.fieldLabelMarkers.push(new window.google.maps.Marker({
+          position: center,
+          map: this.map,
+          clickable: false,
+          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 0 },
+          label: { text: String(field.name || 'Field'), color: '#ffffff', fontSize: '12px', fontWeight: '700' },
+          zIndex: 20
+        }));
       }
     }
 
@@ -232,14 +262,14 @@
 
       for (const [id, polygon] of this.polygons.entries()) {
         const field = this.fields.find(f => f.id === id);
-        const color = field ? (CROP_COLORS[field.crop] || '#3b82f6') : '#3b82f6';
         const isSelected = id === fieldId;
+        const style = this._fieldStyle(field || {}, isSelected);
 
         polygon.setOptions({
-          strokeColor: isSelected ? '#10b981' : '#4b5563',
+          strokeColor: style.strokeColor,
           strokeWeight: isSelected ? 3.5 : 2,
-          fillColor: isSelected ? '#10b981' : color,
-          fillOpacity: isSelected ? 0.35 : 0.15,
+          fillColor: style.fillColor,
+          fillOpacity: style.fillOpacity,
           zIndex: isSelected ? 10 : 1
         });
       }
@@ -441,6 +471,11 @@
       }
     }
 
+    setVisualizationLayer(layerType) {
+      this.visualizationLayer = layerType || null;
+      this.setSelectedField(this.selectedFieldId);
+    }
+
     onFieldSelected(callback) {
       this.fieldSelectedCallback = callback;
     }
@@ -465,6 +500,8 @@
         polygon.setMap(null);
       }
       this.polygons.clear();
+      for (const marker of this.fieldLabelMarkers) marker.setMap(null);
+      this.fieldLabelMarkers = [];
 
       for (const marker of this.observationMarkers) {
         marker.setMap(null);
@@ -497,6 +534,20 @@
     _escape(text) {
       return String(text ?? '').replace(/[&<>"']/g,
         c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    _fieldStyle(field, isSelected) {
+      const cropColor = CROP_COLORS[field.crop] || '#3b82f6';
+      let fillColor = isSelected ? '#10b981' : cropColor;
+      let fillOpacity = isSelected ? 0.35 : 0.15;
+      if (isSelected && this.visualizationLayer === 'ndvi') {
+        fillColor = Number(field.ndvi) > 0.7 ? '#10b981' : Number(field.ndvi) > 0.5 ? '#f59e0b' : '#ef4444';
+        fillOpacity = 0.7;
+      } else if (isSelected && this.visualizationLayer === 'soil') {
+        fillColor = '#8b4513';
+        fillOpacity = 0.6;
+      }
+      return { strokeColor: isSelected ? '#10b981' : '#4b5563', fillColor, fillOpacity };
     }
   }
 

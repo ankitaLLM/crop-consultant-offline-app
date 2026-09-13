@@ -31,10 +31,6 @@ class TerraSyncApp {
     this.offlineBanner = document.getElementById('offlineBanner');
     
     // Map overlay & location elements
-    this.downloadMapBtn = document.getElementById('downloadMapBtn');
-    this.downloadProgressBar = document.getElementById('downloadProgressBar');
-    this.downloadProgressFill = document.getElementById('downloadProgressFill');
-    this.downloadStatusText = document.getElementById('downloadStatusText');
     this.locateMeBtn = document.getElementById('locateMeBtn');
     this.followLocationBtn = document.getElementById('followLocationBtn');
     this.locationStatusBadge = document.getElementById('locationStatusBadge');
@@ -478,9 +474,12 @@ class TerraSyncApp {
     }
 
     // Offline mode toggle
-    this.networkToggle.addEventListener('change', (e) => {
+    this.networkToggle.addEventListener('change', async (e) => {
       this.demoOffline = !e.target.checked;
       this.updateOnlineStatus();
+      if (this.mapController) {
+        await this.mapController.setConnectivityState(this.isOnline);
+      }
     });
 
     window.addEventListener('online', () => this.updateOnlineStatus());
@@ -696,8 +695,6 @@ class TerraSyncApp {
     // Load local observations merged with seeded ones
     await this.loadFieldObservations(field);
 
-    this.updateMapCacheUI(field);
-
     // Reset map layers when switching fields
     this.activeMapLayer = null;
     if (this.layerNdviBtn) {
@@ -764,6 +761,7 @@ class TerraSyncApp {
       this.layerNdviBtn.classList.add('btn-secondary');
       this.layerSoilBtn.classList.remove('btn-primary');
       this.layerSoilBtn.classList.add('btn-secondary');
+      this.mapController?.setVisualizationLayer(null);
       return;
     }
 
@@ -783,6 +781,7 @@ class TerraSyncApp {
       this.layerSoilBtn.classList.add('btn-primary');
       this.showToast(`Soil Layer Active: ${field ? field.soilType : 'Unknown'}`, false);
     }
+    this.mapController?.setVisualizationLayer(layerType);
   }
 
 
@@ -1029,20 +1028,6 @@ class TerraSyncApp {
     }
   }
 
-  /**
-   * Update map cache card text and UI
-   */
-  updateMapCacheUI(field) {
-    this.downloadStatusText.textContent = 'Field boundaries are local. Offline basemap downloads are not implemented.';
-    this.downloadMapBtn.textContent = 'Map downloads unavailable';
-    this.downloadMapBtn.disabled = true;
-  }
-  /**
-   * Simulates map downloading for offline PWA storage
-   */
-  simulateMapCache() {
-    this.showToast('Offline basemap downloads are not implemented.', true);
-  }
   /**
    * Network Status switch toggled
    */

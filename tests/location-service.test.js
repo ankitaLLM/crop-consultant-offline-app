@@ -187,3 +187,17 @@ test('LocationService: stale fix detection after threshold', () => {
   assert.equal(state.status, 'stale');
   service.destroy();
 });
+
+test('LocationService: permission denial releases an active follow watch', () => {
+  const mockGeo = new MockGeolocation();
+  const service = new LocationService({ geolocationProvider: mockGeo });
+  service.startWatch();
+  mockGeo.emitWatchError({ code: 1, message: 'Denied' });
+
+  const state = service.getState();
+  assert.equal(state.status, 'permission-denied');
+  assert.equal(state.isFollowing, false);
+  assert.equal(service.watchId, null);
+  assert.equal(mockGeo.clearedWatches.length, 1);
+  service.destroy();
+});

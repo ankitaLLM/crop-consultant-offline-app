@@ -270,6 +270,15 @@
 
       this.status = code;
       this.errorMessage = message;
+
+      // A denied permission cannot recover within the active watch. Release it so
+      // the UI is truthful and a later user-initiated retry can start cleanly.
+      if (code === 'permission-denied' && this.watchId !== null && this.geolocation) {
+        this.geolocation.clearWatch(this.watchId);
+        this.watchId = null;
+        this.following = false;
+        this.suspendedFollow = false;
+      }
       this._emit();
 
       const err = new Error(message);

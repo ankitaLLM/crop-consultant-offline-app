@@ -95,6 +95,14 @@
     }
 
     /**
+     * Applies an optional field visualization layer.
+     * @param {'ndvi'|'soil'|null} layerType
+     */
+    setVisualizationLayer(layerType) {
+      throw new Error('setVisualizationLayer() must be implemented by subclass');
+    }
+
+    /**
      * Registers a callback triggered when user clicks a field polygon.
      * @param {Function} callback - (fieldId) => void
      */

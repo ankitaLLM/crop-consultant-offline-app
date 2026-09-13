@@ -32,8 +32,8 @@
     // Legal attribution & policy references (preserves required Google terms)
     googleTermsUrl: 'https://policies.google.com/terms',
     googlePrivacyUrl: 'https://policies.google.com/privacy',
-    appTermsUrl: '#terms',
-    appPrivacyUrl: '#privacy',
+    appTermsUrl: 'terms.html',
+    appPrivacyUrl: 'privacy.html',
 
     // Offline & location settings
     staleLocationThresholdMs: 30000,

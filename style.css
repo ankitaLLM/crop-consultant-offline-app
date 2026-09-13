@@ -1272,6 +1272,8 @@ input:checked + .slider:before {
 .workspace-notice { background: #eaf4ee; border-bottom: 1px solid #b9d6c4; padding: 12px 24px; color: #174e31; font-size: 14px; line-height: 1.5; }
 .workspace-notice > div:first-child { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .workspace-notice > p { margin-top: 3px; }
+.app-update-notice { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 16px; background: #fff7d6; border-bottom: 1px solid #e6c85c; color: #5f4700; font-size: 14px; }
+.app-update-notice[hidden] { display: none; }
 .storage-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .storage-actions .btn { padding: 6px 12px; font-size: 14px; min-height: 36px; background: white; }
 .recommendation-panel { flex: none; }

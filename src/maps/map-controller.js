@@ -38,6 +38,8 @@
       this.currentLocation = null;
       this.trackPoints = [];
       this.followingLocation = false;
+      this.visualizationLayer = null;
+      this.switchPromise = Promise.resolve();
 
       // Event listeners
       this.fieldSelectedListeners = new Set();
@@ -45,8 +47,8 @@
       this.mapPannedListeners = new Set();
       this.adapterChangedListeners = new Set();
 
-      this.onlineHandler = () => this._handleConnectivityChange(true);
-      this.offlineHandler = () => this._handleConnectivityChange(false);
+      this.onlineHandler = () => this.setConnectivityState(true);
+      this.offlineHandler = () => this.setConnectivityState(false);
     }
 
     /**
@@ -138,6 +140,7 @@
         this.activeAdapter.setTrack(this.trackPoints);
       }
       this.activeAdapter.setFollowLocation(this.followingLocation);
+      this.activeAdapter.setVisualizationLayer(this.visualizationLayer);
 
       // Notify adapter change
       for (const cb of this.adapterChangedListeners) {
@@ -153,16 +156,22 @@
      * Switch between adapters manually or dynamically.
      * @param {'google' | 'offline'} targetType
      */
-    async switchAdapter(targetType) {
-      if (targetType === this.activeType) return;
-      try {
-        await this._mountAdapter(targetType);
-      } catch (err) {
-        console.warn(`[MapController] Failed to switch to ${targetType} adapter:`, err.message);
-        if (targetType === 'google') {
-          await this._mountAdapter('offline');
+    switchAdapter(targetType) {
+      this.switchPromise = this.switchPromise.catch(() => {}).then(async () => {
+        if (targetType === this.activeType) return this.activeType;
+        try {
+          await this._mountAdapter(targetType);
+        } catch (err) {
+          console.warn(`[MapController] Failed to switch to ${targetType} adapter:`, err.message);
+          if (targetType === 'google') {
+            await this._mountAdapter('offline');
+          } else {
+            throw err;
+          }
         }
-      }
+        return this.activeType;
+      });
+      return this.switchPromise;
     }
 
     getActiveAdapterType() {
@@ -223,6 +232,13 @@
       }
     }
 
+    setVisualizationLayer(layerType) {
+      this.visualizationLayer = layerType || null;
+      if (this.activeAdapter) {
+        this.activeAdapter.setVisualizationLayer(this.visualizationLayer);
+      }
+    }
+
     onFieldSelected(callback) {
       if (typeof callback === 'function') {
         this.fieldSelectedListeners.add(callback);
@@ -247,13 +263,18 @@
       }
     }
 
+    setConnectivityState(isOnline) {
+      this.config.isOnline = Boolean(isOnline);
+      return this._handleConnectivityChange(Boolean(isOnline));
+    }
+
     _handleConnectivityChange(isOnline) {
       if (!isOnline && this.activeType === 'google') {
-        this.switchAdapter('offline');
+        return this.switchAdapter('offline');
       } else if (isOnline && this.activeType === 'offline' && this.config.googleMapsApiKey) {
-        // Can optionally attempt upgrade to Google when back online
-        this.switchAdapter('google');
+        return this.switchAdapter('google');
       }
+      return Promise.resolve(this.activeType);
     }
 
     destroy() {
