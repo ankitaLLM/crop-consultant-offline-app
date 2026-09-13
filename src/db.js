@@ -3,7 +3,7 @@
  * Handles confirmed device-local data persistence and draft migrations.
  */
 class TerraSyncDB {
-  constructor(dbName = 'TerraSyncDB', version = 4) {
+  constructor(dbName = 'TerraSyncDB', version = 5) {
     this.dbName = dbName;
     this.version = version;
     this.db = null;
@@ -86,6 +86,12 @@ class TerraSyncDB {
     });
   }
 
+  async getVisible(storeName, ownerId = null) {
+    const records = await this.getAll(storeName);
+    return records.filter(record => ownerId ?
+      (!record.cloudOwnerId || record.cloudOwnerId === ownerId) : !record.cloudOwnerId);
+  }
+
   get(storeName, key) {
     return new Promise((resolve, reject) => {
       if (!this.db) return reject(new Error('Database not initialized'));
@@ -144,13 +150,15 @@ class TerraSyncDB {
   addScoutingLog(observation) {
     return this.put('scoutingLogs', {
       ...observation,
-      createdAt: new Date().toISOString(),
-      syncStatus: 'local-only'
+      id: observation.id || crypto.randomUUID(),
+      createdAt: observation.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      syncStatus: 'pending'
     });
   }
 
-  getScoutingLogs() {
-    return this.getAll('scoutingLogs');
+  getScoutingLogs(ownerId = null) {
+    return this.getVisible('scoutingLogs', ownerId);
   }
 
   addRecommendation(rec) {
@@ -179,7 +187,7 @@ class TerraSyncDB {
           return;
         }
         saved = { ...draft, revision: expectedRevision + 1,
-          syncStatus: 'local-only', updatedAt: new Date().toISOString() };
+          syncStatus: 'pending', updatedAt: new Date().toISOString() };
         store.put(saved);
       };
       tx.oncomplete = () => resolve(saved);

@@ -31,7 +31,16 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 - Autosaved recommendation and sales drafts with transaction confirmation and conflicting-tab protection.
 - Printable draft estimates with agronomic and pricing disclaimers.
 - JSON backup export of device records.
-- Service Worker `v6` caching application core while explicitly excluding third-party map endpoints.
+- Service Worker `v9` caching the application core while explicitly excluding map tiles and API responses.
+
+### 5. Authenticated Cross-Browser Cloud Sync
+- Optional Supabase email/password authentication and user-scoped PostgreSQL storage.
+- Observations and recommendation/sales documents save locally first, then synchronize automatically when online.
+- The same signed-in user can retrieve records in Chrome, Edge, Safari, private browsing, or another device.
+- Newest-change-wins conflict protection runs both in the client and database; cloud status is shown only after a server acknowledgement.
+- Row-level security prevents authenticated users from reading or writing another user's records.
+
+Setup is required before cloud sync becomes active. See [docs/cloud-sync-setup.md](docs/cloud-sync-setup.md) and run [supabase/schema.sql](supabase/schema.sql) in the Supabase SQL editor.
 
 ---
 
@@ -63,7 +72,7 @@ Detailed manual acceptance procedures are provided in [docs/testing.md](docs/tes
 
 ## Current Architecture & Limitations
 
-- **Local-First Storage**: Data is stored locally in IndexedDB (version 4). There is no cloud backend, multi-device synchronization, or remote database. Work remains on the current browser/device.
+- **Local-First Storage**: Data is stored immediately in IndexedDB (version 5). When Supabase is configured and the consultant signs in, user-created observations and documents synchronize across browsers and devices. Without configuration or authentication, work remains on the current browser/device.
 - **Demonstration Controls**: The network toggle is a demonstration switch simulating offline state; it does not sever the physical operating system connection.
 - **Sample Agronomic Data**: Grower contacts, fields, soil readings, NDVI scores, and product catalog pricing are demonstration data.
 - **Consultant Responsibility**: Product suitability, application rates, chemical compatibility, and label restrictions must be verified by a certified crop advisor.

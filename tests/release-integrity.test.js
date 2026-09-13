@@ -39,3 +39,13 @@ test('Release integrity: privacy and terms links are public pages', () => {
   assert.match(html, /href="terms\.html"/);
   assert.match(html, /href="privacy\.html"/);
 });
+
+test('Release integrity: cloud sync assets and secure schema are present', () => {
+  const html = read('index.html');
+  const schema = read('supabase/schema.sql');
+  assert.match(html, /src="src\/sync\.js\?v=9"/);
+  assert.match(html, /id="cloudAuthBtn"/);
+  assert.match(schema, /enable row level security/i);
+  assert.match(schema, /auth\.uid\(\)/);
+  assert.doesNotMatch(read('src/config.js'), /service_role/i);
+});

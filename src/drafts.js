@@ -1,4 +1,4 @@
-/* Device-local recommendation workspace. No server acknowledgements are fabricated. */
+/* Offline-first recommendation workspace. Cloud status changes only after acknowledgement. */
 const escapeDraftHTML = (value) => String(value ?? '').replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 window.escapeHTML = escapeDraftHTML;
@@ -69,7 +69,8 @@ class DraftWorkspace {
         fieldId: field.id, fieldName: field.name, fieldAcreage: field.acreage,
         growerId: field.growerId, growerName: grower?.name || '', crop: field.crop,
         variety: field.variety || '', category: '', productId: '', rate: '', notes: '',
-        documentType: 'recommendation', status: 'editing', syncStatus: 'local-only'
+        documentType: 'recommendation', status: 'editing', syncStatus: 'pending',
+        cloudOwnerId: app.cloud?.user?.id || null
       };
       if (!this.record) throw new Error('Draft could not be found');
       this.revision = this.record.revision || 0;
@@ -128,6 +129,9 @@ class DraftWorkspace {
         this.record = saved;
         this.revision = saved.revision;
         this.channel?.postMessage({ changed: saved.id });
+        window.dispatchEvent(new CustomEvent('terrasync-local-change', {
+          detail: { entityType: 'draft', entityId: saved.id }
+        }));
       } catch (error) {
         this.failed = error;
       }
@@ -138,7 +142,7 @@ class DraftWorkspace {
           this.announce(this.failed.name === 'DraftConflictError' ? this.failed.message :
             'Not saved. Keep this form open. Free device storage, then retry, or export your work.', true);
         } else {
-          this.announce(`Saved on this device at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · not sent`);
+          this.announce(`Saved on this device at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${this.app.cloud?.signedIn ? 'waiting for cloud' : 'sign in to sync'}`);
         }
         this.render();
       }
@@ -186,7 +190,8 @@ class DraftWorkspace {
   async render() {
     const version = ++this.renderVersion;
     try {
-      const [drafts, logs] = await Promise.all([this.db.getAll('drafts'), this.db.getScoutingLogs()]);
+      const ownerId = this.app.cloud?.user?.id || null;
+      const [drafts, logs] = await Promise.all([this.db.getVisible('drafts', ownerId), this.db.getScoutingLogs(ownerId)]);
       if (version !== this.renderVersion) return;
       drafts.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
       const list = this.app.syncQueueList;
@@ -206,7 +211,7 @@ class DraftWorkspace {
         card.innerHTML = `<div class="draft-card-top"><span class="draft-kind">${draft.documentType === 'sales' ? 'Sales draft' : 'Recommendation'}</span><span class="draft-state">${draft.status === 'ready' ? 'Ready for review' : 'In progress'}</span></div>
           <h3>${escapeDraftHTML(draft.fieldName)}</h3><p>${escapeDraftHTML(draft.growerName)}</p>
           <p class="draft-product">${escapeDraftHTML(price?.productName || 'Product not selected')}${price ? ` · ${price.cost.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}` : ''}</p>
-          <p class="draft-meta">Saved ${escapeDraftHTML(new Date(draft.updatedAt).toLocaleString())} · device only</p>
+          <p class="draft-meta">Saved ${escapeDraftHTML(new Date(draft.updatedAt).toLocaleString())} · ${draft.syncStatus === 'synced' ? 'cloud copy confirmed' : 'waiting for cloud'}</p>
           ${draft.legacyStatus ? '<p class="draft-meta">Recovered from the previous demo. No server upload was verified.</p>' : ''}
           <div class="draft-actions"><button class="btn btn-primary" data-action="edit">${draft.status === 'ready' ? 'Edit draft' : 'Resume draft'}</button><button class="btn" data-action="print" ${price ? '' : 'disabled'}>Preview / print</button></div>`;
         card.querySelector('[data-action="edit"]').addEventListener('click', () => this.open(draft.id));
@@ -224,7 +229,8 @@ class DraftWorkspace {
     try {
       await this.chain;
       const payload = { format: 'terrasync-local-backup', version: 1, exportedAt: new Date().toISOString(),
-        drafts: await this.db.getAll('drafts'), observations: await this.db.getScoutingLogs(),
+        drafts: await this.db.getVisible('drafts', this.app.cloud?.user?.id || null),
+        observations: await this.db.getScoutingLogs(this.app.cloud?.user?.id || null),
         unsavedEditor: this.failed && this.record ? { ...this.record, ...this.snapshot() } : null };
       const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
       const link = document.createElement('a');

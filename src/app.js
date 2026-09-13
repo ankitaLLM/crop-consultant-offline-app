@@ -29,6 +29,7 @@ class TerraSyncApp {
     this.syncStatusText = document.getElementById('syncStatusText');
     this.manualSyncBtn = document.getElementById('manualSyncBtn');
     this.offlineBanner = document.getElementById('offlineBanner');
+    this.cloudAuthModal = document.getElementById('cloudAuthModal');
     
     // Map overlay & location elements
     this.locateMeBtn = document.getElementById('locateMeBtn');
@@ -145,6 +146,7 @@ class TerraSyncApp {
 
       // 4. Initialize Map Controller & Location Service
       this.drafts = new DraftWorkspace(this);
+      this.cloud = new TerraSyncCloud(this);
       await this.initMapControllerAndLocation();
 
       // 5. Setup UI listeners
@@ -160,6 +162,9 @@ class TerraSyncApp {
       
       // 8. Trigger connection check
       this.updateOnlineStatus();
+
+      // 9. Restore authenticated cloud session and synchronize
+      await this.cloud.initialize();
 
       this.showToast('TerraSync Agronomy Module Initialized', false);
     } catch (err) {
@@ -494,7 +499,10 @@ class TerraSyncApp {
       }
     });
 
-    window.addEventListener('online', () => this.updateOnlineStatus());
+    window.addEventListener('online', () => {
+      this.updateOnlineStatus();
+      this.cloud?.sync();
+    });
     window.addEventListener('offline', () => this.updateOnlineStatus());
     document.getElementById('exportEditorBtn').addEventListener('click', () => this.drafts.exportBackup());
     document.getElementById('protectStorageBtn').addEventListener('click', async () => {
@@ -509,6 +517,63 @@ class TerraSyncApp {
       if (this.isOnline && !this.syncInProgress) {
         this.triggerSync();
       }
+    });
+
+    const cloudAuthBtn = document.getElementById('cloudAuthBtn');
+    const closeCloudAuthBtn = document.getElementById('closeCloudAuthBtn');
+    const cloudAuthForm = document.getElementById('cloudAuthForm');
+    const cloudStatus = document.getElementById('cloudAuthStatus');
+    const openCloudDialog = () => {
+      document.getElementById('supabaseUrlInput').value = this.cloud?.config?.url || '';
+      document.getElementById('supabaseKeyInput').value = this.cloud?.config?.publishableKey || '';
+      this.cloudAuthModal.classList.add('open');
+      this.cloudAuthModal.inert = false;
+      this.cloudAuthModal.setAttribute('aria-hidden', 'false');
+      document.getElementById(this.cloud?.signedIn ? 'cloudSignOutBtn' : 'cloudEmailInput').focus();
+    };
+    const closeCloudDialog = () => {
+      this.cloudAuthModal.classList.remove('open');
+      this.cloudAuthModal.inert = true;
+      this.cloudAuthModal.setAttribute('aria-hidden', 'true');
+      cloudAuthBtn.focus();
+    };
+    cloudAuthBtn.addEventListener('click', openCloudDialog);
+    closeCloudAuthBtn.addEventListener('click', closeCloudDialog);
+    this.cloudAuthModal.addEventListener('click', event => {
+      if (event.target === this.cloudAuthModal) closeCloudDialog();
+    });
+    document.getElementById('saveCloudConfigBtn').addEventListener('click', () => {
+      try {
+        this.cloud.saveConfiguration(document.getElementById('supabaseUrlInput').value,
+          document.getElementById('supabaseKeyInput').value);
+        cloudStatus.textContent = 'Connection saved. Reloading TerraSync…';
+        location.reload();
+      } catch (error) { cloudStatus.textContent = error.message; }
+    });
+    cloudAuthForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      cloudStatus.textContent = 'Signing in…';
+      try {
+        await this.cloud.signIn(document.getElementById('cloudEmailInput').value,
+          document.getElementById('cloudPasswordInput').value);
+        cloudStatus.textContent = 'Signed in. Synchronizing your records…';
+        await this.cloud.sync();
+      } catch (error) { cloudStatus.textContent = `Sign-in failed: ${error.message}`; }
+    });
+    document.getElementById('cloudSignUpBtn').addEventListener('click', async () => {
+      if (!cloudAuthForm.reportValidity()) return;
+      cloudStatus.textContent = 'Creating account…';
+      try {
+        await this.cloud.signUp(document.getElementById('cloudEmailInput').value,
+          document.getElementById('cloudPasswordInput').value);
+        cloudStatus.textContent = 'Account created. Check your email if confirmation is enabled, then sign in.';
+      } catch (error) { cloudStatus.textContent = `Account creation failed: ${error.message}`; }
+    });
+    document.getElementById('cloudSignOutBtn').addEventListener('click', async () => {
+      try {
+        await this.cloud.signOut();
+        cloudStatus.textContent = 'Signed out. Local records remain on this browser.';
+      } catch (error) { cloudStatus.textContent = `Sign-out failed: ${error.message}`; }
     });
 
     // Cache Map tiles
@@ -813,7 +878,7 @@ class TerraSyncApp {
    * Load local scouting logs and combine with initial data
    */
   async loadFieldObservations(field) {
-    const localObs = await this.db.getScoutingLogs();
+    const localObs = await this.db.getScoutingLogs(this.cloud?.user?.id || null);
     const fieldLocalObs = localObs.filter(o => o.fieldId === field.id);
     
     // Merge seeded scoutingHistory with newly logged local observations
@@ -1103,13 +1168,17 @@ class TerraSyncApp {
         date: new Date().toISOString().split('T')[0],
         lat: lat,
         lng: lng,
-        location: location
+        location: location,
+        cloudOwnerId: this.cloud?.user?.id || null
       };
 
       await this.db.addScoutingLog(observation);
+      window.dispatchEvent(new CustomEvent('terrasync-local-change', {
+        detail: { entityType: 'observation' }
+      }));
       
       this.closeScoutingModal();
-      this.showToast('Observation saved on this device · not sent', false);
+      this.showToast(`Observation saved on this device · ${this.cloud?.signedIn ? 'waiting for cloud' : 'sign in to sync'}`, false);
       await this.drafts.render();
 
       // Re-load view content
@@ -1129,8 +1198,11 @@ class TerraSyncApp {
     this.syncStatusText.textContent = this.isOnline ? 'Network available · device-only saves' : this.demoOffline ? 'Offline demo · device-only saves' : 'Offline · device-only saves';
     this.offlineBanner.style.display = this.isOnline ? 'none' : 'flex';
     this.offlineBanner.textContent = this.demoOffline ? 'OFFLINE DEMO · NETWORK IS NOT DISCONNECTED' : 'OFFLINE · WORK SAVES ON THIS DEVICE';
-    this.manualSyncBtn.disabled = true;
-    this.manualSyncBtn.textContent = 'Cloud sync not connected';
+    if (this.cloud) this.cloud.updateUI();
+    else {
+      this.manualSyncBtn.disabled = true;
+      this.manualSyncBtn.textContent = 'Cloud setup';
+    }
     if (this.mapController) {
       this.mapController.setConnectivityState(this.isOnline);
     }
@@ -1140,9 +1212,8 @@ class TerraSyncApp {
    * Trigger Synchronization Queue
    */
   async triggerSync() {
-    // No backend is configured. Never fabricate server acknowledgements.
     this.updateOnlineStatus();
-    await this.drafts.render();
+    await this.cloud?.sync();
   }
   /**
    * Refresh sync queue list display

@@ -1,6 +1,6 @@
 // Versioned, scope-specific shell. Never cache arbitrary APIs, Google Maps, or other Pages apps.
 const PREFIX = `terrasync-${encodeURIComponent(self.registration.scope)}-`;
-const CACHE = `${PREFIX}v8`;
+const CACHE = `${PREFIX}v9`;
 const CORE = [
   './',
   './index.html',
@@ -12,9 +12,10 @@ const CORE = [
   './src/maps/offline-field-adapter.js?v=8',
   './src/maps/google-map-adapter.js?v=8',
   './src/maps/map-controller.js?v=8',
-  './src/db.js?v=8',
-  './src/drafts.js?v=8',
-  './src/app.js?v=8',
+  './src/db.js?v=9',
+  './src/sync.js?v=9',
+  './src/drafts.js?v=9',
+  './src/app.js?v=9',
   './src/data.js',
   './manifest.json',
   './assets/icon.svg',
@@ -24,7 +25,8 @@ const CORE = [
 ];
 const CORE_URLS = new Set(CORE.map(path => new URL(path, self.registration.scope).href));
 const LEAFLET = ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'];
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {

@@ -18,6 +18,11 @@
   'use strict';
 
   return {
+    // Supabase Project URL and public publishable/anon key. These browser values
+    // are safe to expose only when the RLS policies in supabase/schema.sql exist.
+    supabaseUrl: 'https://kboyspeaoemlwaspzfqr.supabase.co',
+    supabasePublishableKey: 'sb_publishable_DMT6zJuZWPK93_PRsr8Weg_pSBVIJAw',
+
     // Google Maps JavaScript API key.
     // Insert your restricted browser key here, configure in the UI, or override via window.TERRASYNC_CONFIG.
     googleMapsApiKey: (typeof localStorage !== 'undefined' && localStorage.getItem('terrasync_google_maps_api_key')) || '',

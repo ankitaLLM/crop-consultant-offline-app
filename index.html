@@ -52,13 +52,15 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>
         Cloud sync not connected
       </button>
+      <button id="cloudAuthBtn" class="btn" type="button">Connect cloud</button>
     </div>
   </header>
 
   <section class="workspace-notice" aria-label="Device storage">
     <div><strong>Field workspace</strong><span id="localRecordSummary" role="status">Opening saved work…</span></div>
     <p id="offlineReadiness" role="status">Preparing offline app access…</p>
-    <p>Demo data · saved only in this browser, not in the cloud. Wait for “Saved on this device” before closing.</p>
+    <p>Local-first workspace · signed-in users can synchronize observations and documents across browsers and devices.</p>
+    <p id="cloudAccountText" role="status">Cloud synchronization requires setup</p>
     <div class="storage-actions"><button id="exportDraftsBtn" class="btn">Download backup</button><button id="protectStorageBtn" class="btn">Protect local storage</button></div>
     <p id="storageProtectionStatus" role="status">Clearing browser data removes local work. Keep a backup; automatic restore is not yet available.</p>
   </section>
@@ -385,6 +387,33 @@
     </div>
   </div>
 
+  <!-- MODAL: Cloud account and synchronization -->
+  <div id="cloudAuthModal" class="recommendation-modal-overlay" role="dialog" aria-modal="true" aria-label="Cloud account" aria-hidden="true" inert>
+    <div class="recommendation-modal cloud-auth-modal">
+      <div class="modal-header">
+        <h3>TerraSync cloud account</h3>
+        <button type="button" id="closeCloudAuthBtn" class="modal-close" aria-label="Close cloud account dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="cloud-help">Sign in with the same account on Chrome, Edge, Safari, or another device to access the same observations and documents.</p>
+        <div class="cloud-config-panel">
+          <h4>Supabase connection</h4>
+          <div class="form-group"><label for="supabaseUrlInput">Project URL</label><input id="supabaseUrlInput" class="form-input" type="url" placeholder="https://project-ref.supabase.co" autocomplete="off"></div>
+          <div class="form-group"><label for="supabaseKeyInput">Publishable key</label><input id="supabaseKeyInput" class="form-input" type="text" autocomplete="off" spellcheck="false"></div>
+          <button id="saveCloudConfigBtn" class="btn" type="button">Save connection and reload</button>
+          <p class="download-status-text">Use only a public publishable/anon key. Never enter a service-role key.</p>
+        </div>
+        <form id="cloudAuthForm">
+          <div class="form-group"><label for="cloudEmailInput">Email</label><input id="cloudEmailInput" class="form-input" type="email" autocomplete="username" required></div>
+          <div class="form-group"><label for="cloudPasswordInput">Password</label><input id="cloudPasswordInput" class="form-input" type="password" autocomplete="current-password" minlength="8" required></div>
+          <p id="cloudAuthStatus" class="draft-save-status" role="status" aria-live="polite"></p>
+          <div class="cloud-auth-actions"><button class="btn btn-primary" type="submit">Sign in</button><button id="cloudSignUpBtn" class="btn" type="button">Create account</button><button id="cloudSignOutBtn" class="btn" type="button" hidden>Sign out</button></div>
+        </form>
+        <p class="private-window-warning"><strong>Private browsing:</strong> cloud-confirmed records remain available, but unsynchronized offline work can be erased when the final private window closes.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer Legal & Attribution -->
   <footer class="app-footer">
     <div class="footer-inner">
@@ -412,9 +441,11 @@
   <script src="src/maps/map-controller.js?v=8"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="src/data.js"></script>
-  <script src="src/db.js?v=8"></script>
-  <script src="src/drafts.js?v=8"></script>
-  <script src="src/app.js?v=8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="src/db.js?v=9"></script>
+  <script src="src/sync.js?v=9"></script>
+  <script src="src/drafts.js?v=9"></script>
+  <script src="src/app.js?v=9"></script>
   <script>
     const readiness = document.getElementById('offlineReadiness');
     window.addEventListener('terrasync-db-blocked', () => {
@@ -449,9 +480,10 @@
             'src/maps/offline-field-adapter.js?v=8',
             'src/maps/google-map-adapter.js?v=8',
             'src/maps/map-controller.js?v=8',
-            'src/db.js?v=8',
-            'src/drafts.js?v=8',
-            'src/app.js?v=8',
+            'src/db.js?v=9',
+            'src/sync.js?v=9',
+            'src/drafts.js?v=9',
+            'src/app.js?v=9',
             'src/data.js',
             'terms.html',
             'privacy.html'

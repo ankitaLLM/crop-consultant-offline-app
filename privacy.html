@@ -9,12 +9,14 @@
 <body>
   <p><a href="./">← Return to TerraSync</a></p>
   <h1>TerraSync Privacy Notice</h1>
-  <p>Last updated: September 12, 2026</p>
+  <p>Last updated: September 13, 2026</p>
   <aside>This public demonstration contains fictional grower and agronomic records. Do not enter real confidential grower information into the public demo.</aside>
   <h2>Browser storage</h2>
-  <p>Drafts and observations are stored locally in IndexedDB in the browser you use. This release has no TerraSync backend, account system, cloud backup, analytics integration, or automatic email delivery. Clearing browser data can remove locally saved work.</p>
+  <p>Drafts and observations are stored locally in IndexedDB in the browser you use. Clearing browser data can remove records that have not synchronized. If a Supabase project is configured and you sign in, the application sends your email authentication data, drafts, observations, and attached observation coordinates to that Supabase project so the records can be accessed from your other signed-in browsers and devices.</p>
+  <h2>Account and cloud synchronization</h2>
+  <p>Cloud synchronization is optional and inactive until Supabase is configured and you sign in. Cloud records are associated with your authenticated user ID. Database row-level security is designed to restrict records to that user. The operator of the configured Supabase project is responsible for account administration, retention, backups, security configuration, and responding to data requests.</p>
   <h2>Device location</h2>
-  <p>TerraSync requests browser location only after you choose a location action. A location may be displayed on the map or attached to an observation when the attachment control is selected. This release stores attached locations locally and does not transmit them to a TerraSync server.</p>
+  <p>TerraSync requests browser location only after you choose a location action. A location may be displayed on the map or attached to an observation when the attachment control is selected. When cloud synchronization is active, coordinates attached to an observation are included in the synchronized record.</p>
   <h2>Google Maps</h2>
   <p>If a Google Maps API key is configured, the browser contacts Google to load the online map. Google may process technical and location-related information under the <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. TerraSync does not cache Google map content for offline use.</p>
   <h2>Backups</h2>

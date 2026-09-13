@@ -107,6 +107,13 @@ header {
   gap: 1.5rem;
 }
 
+.cloud-auth-modal { max-width: 560px; }
+.cloud-help { color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem; }
+.cloud-config-panel { background: var(--bg-base); border: 1px solid var(--border-glow); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
+.cloud-config-panel h4 { margin-bottom: 0.75rem; }
+.cloud-auth-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.private-window-warning { margin-top: 1rem; padding: 0.75rem; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; color: #9a3412; font-size: 0.8rem; line-height: 1.4; }
+
 /* Toggle Switch */
 .network-switch {
   display: flex;
