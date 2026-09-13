@@ -39,7 +39,11 @@
       this.config = config;
 
       this.container = null;
-      this.map = null; // Leaflet instance without tileLayer (if L available)
+      this.map = null; // Leaflet instance
+      this.tileLayer = null; // Optional online basemap tile layer
+      this.resizeObserver = null;
+      this.onWindowResize = null;
+      this.basemapEnabled = config.enableOsmOnlineBasemap !== false;
       this.svgContainer = null; // SVG vector fallback
 
       this.fields = [];
@@ -84,6 +88,23 @@
       } else {
         this._mountSvgEngine();
       }
+
+      // Automatically keep Leaflet responsive to layout shifts
+      if (typeof ResizeObserver !== 'undefined' && this.container) {
+        this.resizeObserver = new ResizeObserver(() => {
+          if (this.map) {
+            this.map.invalidateSize();
+          }
+        });
+        this.resizeObserver.observe(this.container);
+      }
+
+      if (typeof window !== 'undefined') {
+        this.onWindowResize = () => {
+          if (this.map) this.map.invalidateSize();
+        };
+        window.addEventListener('resize', this.onWindowResize);
+      }
     }
 
     _createOfflineNotice() {
@@ -99,18 +120,59 @@
       this.container.appendChild(this.offlineBanner);
     }
 
+    _updateBasemapLayer(overrideOnline) {
+      if (!this.map || typeof window === 'undefined' || !window.L) return;
+
+      const isOnline = typeof overrideOnline === 'boolean'
+        ? overrideOnline
+        : (typeof this.config.isOnline === 'boolean'
+            ? this.config.isOnline
+            : (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : true));
+
+      const showTiles = isOnline && !this.config.forceOfflineFieldView && (this.basemapEnabled !== false);
+
+      if (showTiles) {
+        if (!this.tileLayer) {
+          this.tileLayer = window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+          }).addTo(this.map);
+          this.tileLayer.bringToBack();
+        }
+        if (this.offlineBanner) {
+          this.offlineBanner.style.display = 'none';
+        }
+      } else {
+        if (this.tileLayer) {
+          this.map.removeLayer(this.tileLayer);
+          this.tileLayer = null;
+        }
+        if (this.offlineBanner) {
+          this.offlineBanner.style.display = 'flex';
+        }
+      }
+    }
+
+    setConnectivity(isOnline) {
+      this._updateBasemapLayer(isOnline);
+    }
+
+    setBasemapEnabled(enabled) {
+      this.basemapEnabled = Boolean(enabled);
+      this._updateBasemapLayer();
+    }
+
     _mountLeafletEngine() {
       const L = window.L;
       const center = this.config.defaultCenter
         ? [this.config.defaultCenter.lat, this.config.defaultCenter.lng]
         : [42.0266, -93.6465];
 
-      // Create map with neutral background and NO TILE LAYER
       this.map = L.map(this.container, {
         center,
         zoom: 13,
         zoomControl: true,
-        attributionControl: false,
+        attributionControl: true,
         fadeAnimation: false
       });
 
@@ -128,6 +190,22 @@
           });
         }
       });
+
+      this._updateBasemapLayer();
+
+      // Trigger size invalidation immediately and shortly after layout settle
+      this.map.invalidateSize();
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => this.map && this.map.invalidateSize());
+      }
+      setTimeout(() => {
+        if (this.map) {
+          this.map.invalidateSize();
+          if (this.selectedFieldId) {
+            this.fitToField(this.selectedFieldId);
+          }
+        }
+      }, 120);
     }
 
     _mountSvgEngine() {
@@ -193,6 +271,17 @@
 
           this.polygons.set(field.id, poly);
         }
+
+        this.map.invalidateSize();
+        if (this.selectedFieldId) {
+          this.fitToField(this.selectedFieldId);
+        } else if (this.fields.length > 0) {
+          const allCoords = this.fields.flatMap(f => Array.isArray(f.polygon) ? f.polygon : []);
+          const valid = allCoords.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+          if (valid.length > 0) {
+            this.map.fitBounds(window.L.latLngBounds(valid), { padding: [30, 30] });
+          }
+        }
       } else if (this.svgContainer) {
         this._renderSvgView();
       }
@@ -228,6 +317,7 @@
       if (!field || !Array.isArray(field.polygon) || field.polygon.length === 0) return;
 
       if (this.map && window.L) {
+        this.map.invalidateSize();
         const bounds = window.L.latLngBounds(field.polygon);
         this.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
       } else if (this.svgContainer) {
@@ -418,6 +508,18 @@
     }
 
     destroy() {
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        this.resizeObserver = null;
+      }
+      if (typeof window !== 'undefined' && this.onWindowResize) {
+        window.removeEventListener('resize', this.onWindowResize);
+        this.onWindowResize = null;
+      }
+      if (this.tileLayer && this.map) {
+        this.map.removeLayer(this.tileLayer);
+        this.tileLayer = null;
+      }
       if (this.map && window.L) {
         this.map.off();
         this.map.remove();

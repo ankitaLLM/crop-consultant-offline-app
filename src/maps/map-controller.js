@@ -265,7 +265,30 @@
 
     setConnectivityState(isOnline) {
       this.config.isOnline = Boolean(isOnline);
+      if (this.activeAdapter && typeof this.activeAdapter.setConnectivity === 'function') {
+        this.activeAdapter.setConnectivity(Boolean(isOnline));
+      }
       return this._handleConnectivityChange(Boolean(isOnline));
+    }
+
+    async setGoogleMapsApiKey(apiKey) {
+      this.config.googleMapsApiKey = (apiKey || '').trim();
+      if (typeof localStorage !== 'undefined') {
+        if (this.config.googleMapsApiKey) {
+          localStorage.setItem('terrasync_google_maps_api_key', this.config.googleMapsApiKey);
+        } else {
+          localStorage.removeItem('terrasync_google_maps_api_key');
+        }
+      }
+      const isOnline = typeof this.config.isOnline === 'boolean'
+        ? this.config.isOnline
+        : (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : true);
+
+      if (this.config.googleMapsApiKey && isOnline && !this.config.forceOfflineFieldView) {
+        return this.switchAdapter('google');
+      } else {
+        return this.switchAdapter('offline');
+      }
     }
 
     _handleConnectivityChange(isOnline) {

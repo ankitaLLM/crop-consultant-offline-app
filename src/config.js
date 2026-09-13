@@ -19,8 +19,8 @@
 
   return {
     // Google Maps JavaScript API key.
-    // Insert your restricted browser key here or override via window.TERRASYNC_CONFIG.
-    googleMapsApiKey: '',
+    // Insert your restricted browser key here, configure in the UI, or override via window.TERRASYNC_CONFIG.
+    googleMapsApiKey: (typeof localStorage !== 'undefined' && localStorage.getItem('terrasync_google_maps_api_key')) || '',
 
     // Optional vector map ID
     googleMapsMapId: '',

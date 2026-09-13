@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1f2937">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -149,6 +149,14 @@
             </button>
             <span id="gpsCoordText" class="download-status-text" style="text-align:center; display:block;">Simulation: Idle</span>
           </div>
+        </div>
+        <div class="map-tool-card">
+          <h4>Basemap Provider</h4>
+          <div id="mapProviderBadge" class="map-provider-badge">Offline Field View</div>
+          <button id="configureMapApiKeyBtn" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; font-size: 0.75rem; padding: 0.35rem;" aria-label="Configure Map Provider">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+            Map Settings
+          </button>
         </div>
       </div>
 
@@ -343,6 +351,40 @@
     <div class="rec-detail-modal"></div>
   </div>
 
+  <!-- MODAL: Map Provider & API Key Settings -->
+  <div id="apiKeyModal" class="recommendation-modal" role="dialog" aria-modal="true" aria-label="Configure Google Maps API Key" style="display: none;">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Map Provider Settings</h3>
+        <button type="button" id="closeApiKeyModalBtn" class="btn-close" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="apiKeyForm">
+        <div class="modal-body">
+          <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.5;">
+            TerraSync supports <strong>Google Maps Platform</strong> for online road, satellite, and hybrid basemaps, or built-in <strong>Offline Field View</strong> for zero-network field boundaries and GPS observations.
+          </p>
+          <div class="form-group">
+            <label for="googleApiKeyInput">Google Maps JavaScript API Key</label>
+            <input type="text" id="googleApiKeyInput" class="form-input" placeholder="AIzaSy..." autocomplete="off" spellcheck="false">
+            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; display: block;">
+              Saved in this browser's local storage. Restrict key to authorized HTTP referrers in Google Cloud Console.
+            </span>
+          </div>
+          <div class="form-group" style="margin-top: 1rem;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem;">
+              <input type="checkbox" id="enableOsmBasemapToggle" checked>
+              <span>Enable OpenStreetMap basemap when online without Google key</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="clearApiKeyBtn" class="btn">Clear Key</button>
+          <button type="submit" class="btn btn-primary">Save &amp; Apply</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Footer Legal & Attribution -->
   <footer class="app-footer">
     <div class="footer-inner">
@@ -361,18 +403,18 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="src/config.js?v=7"></script>
-  <script src="src/geo/geometry.js?v=7"></script>
-  <script src="src/location/location-service.js?v=7"></script>
-  <script src="src/maps/map-adapter.js?v=7"></script>
-  <script src="src/maps/offline-field-adapter.js?v=7"></script>
-  <script src="src/maps/google-map-adapter.js?v=7"></script>
-  <script src="src/maps/map-controller.js?v=7"></script>
+  <script src="src/config.js?v=8"></script>
+  <script src="src/geo/geometry.js?v=8"></script>
+  <script src="src/location/location-service.js?v=8"></script>
+  <script src="src/maps/map-adapter.js?v=8"></script>
+  <script src="src/maps/offline-field-adapter.js?v=8"></script>
+  <script src="src/maps/google-map-adapter.js?v=8"></script>
+  <script src="src/maps/map-controller.js?v=8"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="src/data.js"></script>
-  <script src="src/db.js?v=7"></script>
-  <script src="src/drafts.js?v=7"></script>
-  <script src="src/app.js?v=7"></script>
+  <script src="src/db.js?v=8"></script>
+  <script src="src/drafts.js?v=8"></script>
+  <script src="src/app.js?v=8"></script>
   <script>
     const readiness = document.getElementById('offlineReadiness');
     window.addEventListener('terrasync-db-blocked', () => {
@@ -399,17 +441,17 @@
           await navigator.serviceWorker.ready;
           const core = [
             'index.html',
-            'style.css?v=7',
-            'src/config.js?v=7',
-            'src/geo/geometry.js?v=7',
-            'src/location/location-service.js?v=7',
-            'src/maps/map-adapter.js?v=7',
-            'src/maps/offline-field-adapter.js?v=7',
-            'src/maps/google-map-adapter.js?v=7',
-            'src/maps/map-controller.js?v=7',
-            'src/db.js?v=7',
-            'src/drafts.js?v=7',
-            'src/app.js?v=7',
+            'style.css?v=8',
+            'src/config.js?v=8',
+            'src/geo/geometry.js?v=8',
+            'src/location/location-service.js?v=8',
+            'src/maps/map-adapter.js?v=8',
+            'src/maps/offline-field-adapter.js?v=8',
+            'src/maps/google-map-adapter.js?v=8',
+            'src/maps/map-controller.js?v=8',
+            'src/db.js?v=8',
+            'src/drafts.js?v=8',
+            'src/app.js?v=8',
             'src/data.js',
             'terms.html',
             'privacy.html'

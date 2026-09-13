@@ -88,6 +88,16 @@ class TerraSyncApp {
     this.calcUnitPrice = document.getElementById('calcUnitPrice');
     this.calcTotalQty = document.getElementById('calcTotalQty');
     this.calcTotalCost = document.getElementById('calcTotalCost');
+
+    // Map API Key / Provider settings
+    this.apiKeyModal = document.getElementById('apiKeyModal');
+    this.configureMapApiKeyBtn = document.getElementById('configureMapApiKeyBtn');
+    this.closeApiKeyModalBtn = document.getElementById('closeApiKeyModalBtn');
+    this.apiKeyForm = document.getElementById('apiKeyForm');
+    this.googleApiKeyInput = document.getElementById('googleApiKeyInput');
+    this.enableOsmBasemapToggle = document.getElementById('enableOsmBasemapToggle');
+    this.clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
+    this.mapProviderBadge = document.getElementById('mapProviderBadge');
     
     // State variables
     this.selectedGrowerId = null;
@@ -273,10 +283,12 @@ class TerraSyncApp {
           if (this.locationService) this.locationService.suspendFollow();
         });
         this.mapController.onAdapterChanged((type) => {
+          this.updateMapProviderBadge(type);
           const isGoogle = type === 'google';
-          this.showToast(isGoogle ? 'Google Maps Online active' : 'Offline Field View active (boundaries only)', false);
+          this.showToast(isGoogle ? 'Google Maps Online active' : (this.isOnline ? 'OpenStreetMap Online active' : 'Offline Field View active (boundaries only)'), false);
         });
 
+        this.updateMapProviderBadge(mountedType);
         console.log(`Map mounted with adapter: ${mountedType}`);
       } catch (err) {
         console.warn('MapController failed to initialize:', err);
@@ -558,7 +570,7 @@ class TerraSyncApp {
       this.saveRecommendation();
     });
 
-    // Detail Modal closing
+      // Detail Modal closing
     if (this.recDetailOverlay) {
       this.recDetailOverlay.addEventListener('click', (e) => {
         if (e.target === this.recDetailOverlay) {
@@ -567,9 +579,53 @@ class TerraSyncApp {
       });
     }
 
+    // Map API Key / Provider modal listeners
+    if (this.configureMapApiKeyBtn) {
+      this.configureMapApiKeyBtn.addEventListener('click', () => {
+        this.openApiKeyModal();
+      });
+    }
+    if (this.closeApiKeyModalBtn) {
+      this.closeApiKeyModalBtn.addEventListener('click', () => {
+        this.closeApiKeyModal();
+      });
+    }
+    if (this.clearApiKeyBtn) {
+      this.clearApiKeyBtn.addEventListener('click', async () => {
+        if (this.googleApiKeyInput) this.googleApiKeyInput.value = '';
+        if (this.mapController) {
+          await this.mapController.setGoogleMapsApiKey('');
+        }
+        this.showToast('Google Maps API key cleared.', false);
+        this.closeApiKeyModal();
+      });
+    }
+    if (this.apiKeyForm) {
+      this.apiKeyForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const key = this.googleApiKeyInput?.value.trim() || '';
+        if (this.mapController) {
+          await this.mapController.setGoogleMapsApiKey(key);
+        }
+        if (key) {
+          this.showToast('Google Maps key applied.', false);
+        } else {
+          this.showToast('Using standard offline/OpenStreetMap adapter.', false);
+        }
+        this.closeApiKeyModal();
+      });
+    }
+    if (this.enableOsmBasemapToggle) {
+      this.enableOsmBasemapToggle.addEventListener('change', (e) => {
+        if (this.mapController?.activeAdapter?.setBasemapEnabled) {
+          this.mapController.activeAdapter.setBasemapEnabled(e.target.checked);
+        }
+      });
+    }
+
     // ESC key closes modals
     document.addEventListener('keydown', (e) => {
-      const dialog = [this.recDetailOverlay, this.recModal, this.scoutingModal].find(el => el?.classList.contains('open'));
+      const dialog = [this.recDetailOverlay, this.recModal, this.scoutingModal, this.apiKeyModal].find(el => el?.classList.contains('open') || el?.style.display === 'flex');
       if (dialog && e.key === 'Tab') {
         const nodes = [...dialog.querySelectorAll('button, input, select, textarea, [tabindex="0"]')].filter(el => !el.disabled && !el.hidden);
         const first = nodes[0], last = nodes.at(-1);
@@ -580,8 +636,44 @@ class TerraSyncApp {
         this.closeRecommendationModal();
         this.closeScoutingModal();
         this.closeRecDetailModal();
+        this.closeApiKeyModal();
       }
     });
+  }
+
+  openApiKeyModal() {
+    if (!this.apiKeyModal) return;
+    const currentKey = this.config.googleMapsApiKey || (typeof localStorage !== 'undefined' && localStorage.getItem('terrasync_google_maps_api_key')) || '';
+    if (this.googleApiKeyInput) {
+      this.googleApiKeyInput.value = currentKey;
+    }
+    this.apiKeyModal.style.display = 'flex';
+  }
+
+  closeApiKeyModal() {
+    if (!this.apiKeyModal) return;
+    this.apiKeyModal.style.display = 'none';
+  }
+
+  updateMapProviderBadge(type) {
+    if (!this.mapProviderBadge) return;
+    const isGoogle = type === 'google';
+    if (isGoogle) {
+      this.mapProviderBadge.textContent = 'Google Maps Online';
+      this.mapProviderBadge.style.color = '#10b981';
+      this.mapProviderBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      this.mapProviderBadge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+    } else if (this.isOnline && !this.demoOffline) {
+      this.mapProviderBadge.textContent = 'OpenStreetMap Online';
+      this.mapProviderBadge.style.color = '#3b82f6';
+      this.mapProviderBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+      this.mapProviderBadge.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+    } else {
+      this.mapProviderBadge.textContent = 'Offline Field View';
+      this.mapProviderBadge.style.color = '#f59e0b';
+      this.mapProviderBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+      this.mapProviderBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+    }
   }
 
   /**
@@ -1039,6 +1131,10 @@ class TerraSyncApp {
     this.offlineBanner.textContent = this.demoOffline ? 'OFFLINE DEMO · NETWORK IS NOT DISCONNECTED' : 'OFFLINE · WORK SAVES ON THIS DEVICE';
     this.manualSyncBtn.disabled = true;
     this.manualSyncBtn.textContent = 'Cloud sync not connected';
+    if (this.mapController) {
+      this.mapController.setConnectivityState(this.isOnline);
+    }
+    this.updateMapProviderBadge(this.mapController?.getActiveAdapterType());
   }
   /**
    * Trigger Synchronization Queue

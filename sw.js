@@ -1,20 +1,20 @@
 // Versioned, scope-specific shell. Never cache arbitrary APIs, Google Maps, or other Pages apps.
 const PREFIX = `terrasync-${encodeURIComponent(self.registration.scope)}-`;
-const CACHE = `${PREFIX}v7`;
+const CACHE = `${PREFIX}v8`;
 const CORE = [
   './',
   './index.html',
-  './style.css?v=7',
-  './src/config.js?v=7',
-  './src/geo/geometry.js?v=7',
-  './src/location/location-service.js?v=7',
-  './src/maps/map-adapter.js?v=7',
-  './src/maps/offline-field-adapter.js?v=7',
-  './src/maps/google-map-adapter.js?v=7',
-  './src/maps/map-controller.js?v=7',
-  './src/db.js?v=7',
-  './src/drafts.js?v=7',
-  './src/app.js?v=7',
+  './style.css?v=8',
+  './src/config.js?v=8',
+  './src/geo/geometry.js?v=8',
+  './src/location/location-service.js?v=8',
+  './src/maps/map-adapter.js?v=8',
+  './src/maps/offline-field-adapter.js?v=8',
+  './src/maps/google-map-adapter.js?v=8',
+  './src/maps/map-controller.js?v=8',
+  './src/db.js?v=8',
+  './src/drafts.js?v=8',
+  './src/app.js?v=8',
   './src/data.js',
   './manifest.json',
   './assets/icon.svg',
