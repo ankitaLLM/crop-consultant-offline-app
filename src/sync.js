@@ -3,10 +3,10 @@
  * shared, user-scoped exchange point between browsers and devices.
  */
 (function (root, factory) {
-  const api = factory();
+  const api = factory(root);
   if (typeof module === 'object' && module.exports) module.exports = api;
   else Object.assign(root, api);
-}(typeof self !== 'undefined' ? self : this, function () {
+}(typeof self !== 'undefined' ? self : globalThis, function (root) {
   'use strict';
 
   const ENTITY_STORES = { draft: 'drafts', observation: 'scoutingLogs' };
