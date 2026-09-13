@@ -1,84 +1,38 @@
-const CACHE_NAME = 'terrasync-cache-v3';
-const ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './src/db.js',
-  './src/data.js',
-  './src/app.js',
-  './manifest.json',
-  './assets/icon.svg',
-  './assets/offline-tile-placeholder.svg',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap'
-];
+// Versioned, scope-specific shell. Never cache arbitrary APIs or other Pages apps.
+const PREFIX = `terrasync-${encodeURIComponent(self.registration.scope)}-`;
+const CACHE = `${PREFIX}v5`;
+const CORE = ['./', './index.html', './style.css?v=5', './src/db.js?v=5',
+  './src/drafts.js?v=5', './src/app.js?v=5', './src/data.js', './manifest.json',
+  './assets/icon.svg', './assets/offline-tile-placeholder.svg'];
+const CORE_URLS = new Set(CORE.map(path => new URL(path, self.registration.scope).href));
+const LEAFLET = ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'];
 
-// Install Service Worker and cache resources
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Caching app shell & dependencies');
-      return cache.addAll(ASSETS);
-    }).then(() => self.skipWaiting())
-  );
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await cache.addAll(CORE.map(path => new Request(new URL(path, self.registration.scope), { cache: 'reload' })));
+    // Third-party dependency failures do not block local drafts reopening.
+    await Promise.allSettled(LEAFLET.map(url => cache.add(url)));
+    await self.skipWaiting();
+  })());
 });
-
-// Activate Service Worker and clean up old caches
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log('[Service Worker] Removing old cache:', key);
-            return caches.delete(key);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) {
+      if (name.startsWith(PREFIX) && name !== CACHE) await caches.delete(name);
+    }
+    await self.clients.claim();
+  })());
 });
-
-// Fetch resources: Cache-First strategy with Network fallback
-self.addEventListener('fetch', (e) => {
-  // Only cache GET requests and skip browser extensions or other protocols
-  if (e.request.method !== 'GET' || (!e.request.url.startsWith(self.location.origin) && !e.request.url.startsWith('https://'))) {
-    return;
-  }
-
-  e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Stale-while-revalidate: return cache, update in background
-        fetch(e.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const clone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-            }
-          })
-          .catch(() => {/* Ignore network failures when updating cache in background */});
-        return cachedResponse;
-      }
-
-      // If not cached, fetch from network
-      return fetch(e.request)
-        .then((networkResponse) => {
-          // Cache the new resource dynamically if valid
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseClone));
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // If offline and OSM map tile is requested, return a placeholder
-          if (e.request.url.includes('tile.openstreetmap.org')) {
-            return caches.match('./assets/offline-tile-placeholder.svg');
-          }
-          console.log('[Service Worker] Fetch failed, resource offline:', e.request.url);
-        });
-    })
-  );
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  const isNavigation = event.request.mode === 'navigate' && url.href.startsWith(self.registration.scope);
+  if (!isNavigation && !CORE_URLS.has(url.href) && !LEAFLET.includes(url.href)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    if (isNavigation) return await cache.match(new URL('./index.html', self.registration.scope)) || fetch(event.request);
+    return await cache.match(event.request) || fetch(event.request);
+  })());
 });

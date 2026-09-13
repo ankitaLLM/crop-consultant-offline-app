@@ -1,7 +1,7 @@
 {
   "short_name": "TerraSync",
   "name": "TerraSync - Offline Field Consultant",
-  "description": "Offline-first field mapping and agronomic recommendation application for crop consultants.",
+  "description": "Device-local field workspace for crop consultants to review sample grower data, record observations, and resume recommendation drafts.",
   "categories": ["agriculture", "productivity", "business"],
   "icons": [
     {
@@ -12,7 +12,7 @@
   ],
   "start_url": "./index.html",
   "background_color": "#0d1117",
-  "theme_color": "#1f2937",
+  "theme_color": "#174e31",
   "display": "standalone",
   "orientation": "any"
 }

@@ -3,6 +3,9 @@
  * Dedicated to Crop Consultant persona & workflow
  */
 
+const escapeHTML = window.escapeHTML || (value => String(value ?? '').replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+
 class TerraSyncApp {
   constructor() {
     this.db = window.AppDB;
@@ -103,7 +106,8 @@ class TerraSyncApp {
     this.layerSoilBtn = document.getElementById('layerSoilBtn');
     this.activeMapLayer = null; // 'ndvi', 'soil', or null
     
-    this.isOnline = true;
+    this.isOnline = navigator.onLine;
+    this.demoOffline = false;
     this.syncInProgress = false;
     this.toastTimeout = null;
     this.lastSyncedTimestamp = null;
@@ -124,7 +128,9 @@ class TerraSyncApp {
       await this.loadStateFromDB();
 
       // 4. Initialize Leaflet Map
-      this.initMap();
+      this.drafts = new DraftWorkspace(this);
+      if (window.L) this.initMap();
+      else document.getElementById('map').textContent = 'Map unavailable. Grower data and drafts are still available.';
 
       // 5. Setup UI listeners
       this.setupEventListeners();
@@ -142,6 +148,7 @@ class TerraSyncApp {
 
       this.showToast('TerraSync Agronomy Module Initialized', false);
     } catch (err) {
+      document.getElementById('localRecordSummary').textContent = 'Storage could not open. Close other TerraSync tabs and reload; do not clear browser data.';
       console.error('TerraSync Init failed:', err);
       this.showToast('Database connection error', true);
     }
@@ -159,22 +166,18 @@ class TerraSyncApp {
 
     console.log('Pre-loading consultant database tables (New Schema migration)...');
     
-    // Clear old data to get the updated fields and metadata
-    await this.db.clear('growers');
-    await this.db.clear('fields');
-    await this.db.clear('products');
+    // Preserve existing records; only seed missing items.
     
     const data = window.TerraSyncData;
 
     // Seed growers
     for (const grower of data.growers) {
-      await this.db.put('growers', grower);
+      if (!await this.db.get('growers', grower.id)) await this.db.put('growers', grower);
     }
 
     // Seed fields
     for (const field of data.fields) {
-      field.cachedMap = false;
-      await this.db.put('fields', field);
+      if (!await this.db.get('fields', field.id)) await this.db.put('fields', { ...field, cachedMap: false });
     }
 
     // Seed product catalog & metadata
@@ -248,11 +251,12 @@ class TerraSyncApp {
       center: defaultCenter,
       zoom: 13,
       zoomControl: true,
-      attributionControl: false
+      attributionControl: true
     });
 
     this.tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(this.map);
 
     L.control.scale({ position: 'bottomleft' }).addTo(this.map);
@@ -289,6 +293,9 @@ class TerraSyncApp {
       this.growerDetails.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 0.5rem;">No growers match.</p>';
       this.fieldList.innerHTML = '';
       this.fieldCount.textContent = '(0)';
+      this.selectedFieldId = null;
+      this.openRecModalBtn.disabled = true;
+      this.addObservationBtn.disabled = true;
     }
   }
 
@@ -310,10 +317,20 @@ class TerraSyncApp {
 
     // Offline mode toggle
     this.networkToggle.addEventListener('change', (e) => {
-      this.isOnline = e.target.checked;
+      this.demoOffline = !e.target.checked;
       this.updateOnlineStatus();
     });
 
+    window.addEventListener('online', () => this.updateOnlineStatus());
+    window.addEventListener('offline', () => this.updateOnlineStatus());
+    document.getElementById('exportEditorBtn').addEventListener('click', () => this.drafts.exportBackup());
+    document.getElementById('protectStorageBtn').addEventListener('click', async () => {
+      const status = document.getElementById('storageProtectionStatus');
+      try {
+        const granted = await navigator.storage?.persist?.();
+        status.textContent = granted ? 'Storage protection granted. Clearing browser data still deletes local work.' : 'Protection not granted. Download a backup regularly.';
+      } catch { status.textContent = 'Storage protection unavailable. Download a backup regularly.'; }
+    });
     // Sync button
     this.manualSyncBtn.addEventListener('click', () => {
       if (this.isOnline && !this.syncInProgress) {
@@ -363,6 +380,8 @@ class TerraSyncApp {
     // Modal product categories select loader
     this.recProductType.addEventListener('change', (e) => {
       this.populateModalProducts(e.target.value);
+      // Persist the cleared product as part of the category change.
+      this.drafts.autosave();
     });
 
     // Cost calculations
@@ -385,6 +404,13 @@ class TerraSyncApp {
 
     // ESC key closes modals
     document.addEventListener('keydown', (e) => {
+      const dialog = [this.recDetailOverlay, this.recModal, this.scoutingModal].find(el => el?.classList.contains('open'));
+      if (dialog && e.key === 'Tab') {
+        const nodes = [...dialog.querySelectorAll('button, input, select, textarea, [tabindex="0"]')].filter(el => !el.disabled && !el.hidden);
+        const first = nodes[0], last = nodes.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
       if (e.key === 'Escape') {
         this.closeRecommendationModal();
         this.closeScoutingModal();
@@ -494,6 +520,7 @@ class TerraSyncApp {
     this.fieldDiagnostics.style.display = 'block';
     this.scoutingSection.style.display = 'block';
     this.openRecModalBtn.removeAttribute('disabled');
+    this.addObservationBtn.disabled = false;
 
     // Render soil & NDVI graphs
     this.renderSoilMoistureChart(field.charts.soilMoisture);
@@ -556,6 +583,7 @@ class TerraSyncApp {
    * Renders growers fields boundaries as polygons
    */
   renderFieldsOnMap(growerFields) {
+    if (!this.map) return;
     Object.values(this.mapPolygons).forEach(p => this.map.removeLayer(p));
     this.mapPolygons = {};
 
@@ -663,6 +691,7 @@ class TerraSyncApp {
    * Renders local field markers
    */
   renderScoutingMarkersOnMap(field, localObs) {
+    if (!this.map) return;
     // Remove existing markers
     this.mapMarkers.forEach(m => this.map.removeLayer(m));
     this.mapMarkers = [];
@@ -684,6 +713,7 @@ class TerraSyncApp {
    * Helper to draw a circle marker on leaflet
    */
   createObservationMarker(pin) {
+    pin = Object.fromEntries(Object.entries(pin).map(([k, v]) => [k, typeof v === 'string' ? escapeHTML(v) : v]));
     if (!pin.lat || !pin.lng) return;
     
     const pinColor = pin.severity === 'High' ? '#ef4444' : pin.severity === 'Medium' ? '#f59e0b' : '#10b981';
@@ -813,7 +843,8 @@ class TerraSyncApp {
       return;
     }
 
-    combinedObs.forEach(obs => {
+    combinedObs.forEach(raw => {
+      const obs = Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, typeof v === 'string' ? escapeHTML(v) : v]));
       const div = document.createElement('div');
       div.className = 'scouting-log-item';
       
@@ -844,10 +875,13 @@ class TerraSyncApp {
     this.scoutingForm.reset();
     this.scoutFieldInput.value = field.name;
     this.scoutingModal.classList.add('open');
+    this.scoutingModal.inert = false;
+    this.scoutIssue.focus();
   }
 
   closeScoutingModal() {
     this.scoutingModal.classList.remove('open');
+    this.scoutingModal.inert = true;
   }
 
   /**
@@ -893,7 +927,8 @@ class TerraSyncApp {
       await this.db.addScoutingLog(observation);
       
       this.closeScoutingModal();
-      this.showToast('Field observation logged successfully', false);
+      this.showToast('Observation saved on this device · not sent', false);
+      await this.drafts.render();
 
       // Re-load view content
       await this.loadFieldObservations(field);
@@ -907,224 +942,51 @@ class TerraSyncApp {
    * Update map cache card text and UI
    */
   updateMapCacheUI(field) {
-    if (field.cachedMap) {
-      this.downloadStatusText.textContent = 'Map area cached for offline use.';
-      this.downloadStatusText.style.color = 'var(--primary)';
-      this.downloadMapBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Re-Cache Maps
-      `;
-    } else {
-      this.downloadStatusText.textContent = 'Map area not cached.';
-      this.downloadStatusText.style.color = 'var(--text-muted)';
-      this.downloadMapBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        Cache Field
-      `;
-    }
+    this.downloadStatusText.textContent = 'Field boundaries are local. Offline basemap downloads are not implemented.';
+    this.downloadMapBtn.textContent = 'Map downloads unavailable';
+    this.downloadMapBtn.disabled = true;
   }
-
   /**
    * Simulates map downloading for offline PWA storage
    */
   simulateMapCache() {
-    const fieldId = this.selectedFieldId;
-    const field = this.fields.find(f => f.id === fieldId);
-    if (!field) return;
-
-    this.downloadProgressBar.style.display = 'block';
-    this.downloadStatusText.textContent = 'Caching tile layers...';
-    this.downloadStatusText.style.color = 'var(--text-secondary)';
-    this.downloadMapBtn.setAttribute('disabled', 'true');
-
-    let progress = 0;
-    const interval = setInterval(async () => {
-      progress += 10;
-      this.downloadProgressFill.style.width = `${progress}%`;
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        
-        field.cachedMap = true;
-        await this.db.put('fields', field);
-
-        const idx = this.fields.findIndex(f => f.id === fieldId);
-        if (idx !== -1) this.fields[idx].cachedMap = true;
-
-        this.downloadProgressBar.style.display = 'none';
-        this.downloadProgressFill.style.width = '0%';
-        this.downloadMapBtn.removeAttribute('disabled');
-        
-        this.updateMapCacheUI(field);
-        this.renderFieldList();
-        this.showToast(`Field tiles successfully cached offline!`, false);
-      }
-    }, 150);
+    this.showToast('Offline basemap downloads are not implemented.', true);
   }
-
   /**
    * Network Status switch toggled
    */
   updateOnlineStatus() {
-    if (this.isOnline) {
-      this.syncStatusBadge.className = 'sync-badge';
-      this.syncStatusBadge.classList.remove('offline', 'pending');
-      this.syncStatusText.textContent = 'Synced';
-      this.offlineBanner.style.display = 'none';
-      this.manualSyncBtn.removeAttribute('disabled');
-      this.triggerSync();
-    } else {
-      this.syncStatusBadge.className = 'sync-badge offline';
-      this.syncStatusText.textContent = 'Offline';
-      this.offlineBanner.style.display = 'flex';
-      this.manualSyncBtn.setAttribute('disabled', 'true');
-      this.showToast('Switched to Offline Mode', true);
-    }
+    this.isOnline = navigator.onLine && !this.demoOffline;
+    this.syncStatusBadge.className = this.isOnline ? 'sync-badge' : 'sync-badge offline';
+    this.syncStatusText.textContent = this.isOnline ? 'Network available · device-only saves' : this.demoOffline ? 'Offline demo · device-only saves' : 'Offline · device-only saves';
+    this.offlineBanner.style.display = this.isOnline ? 'none' : 'flex';
+    this.offlineBanner.textContent = this.demoOffline ? 'OFFLINE DEMO · NETWORK IS NOT DISCONNECTED' : 'OFFLINE · WORK SAVES ON THIS DEVICE';
+    this.manualSyncBtn.disabled = true;
+    this.manualSyncBtn.textContent = 'Cloud sync not connected';
   }
-
   /**
    * Trigger Synchronization Queue
    */
   async triggerSync() {
-    try {
-      const queue = await this.db.getSyncQueue();
-      const pendingItems = queue.filter(item => item.status === 'pending');
-      
-      // Also grab pending local scouting observations
-      const localScoutLogs = await this.db.getScoutingLogs();
-      const pendingScoutLogs = localScoutLogs.filter(log => log.syncStatus === 'pending');
-
-      if (pendingItems.length === 0 && pendingScoutLogs.length === 0) {
-        this.syncStatusBadge.className = 'sync-badge';
-        this.syncStatusText.textContent = 'Synced';
-        return;
-      }
-
-      if (this.syncInProgress) return;
-
-      this.syncInProgress = true;
-      this.syncStatusBadge.className = 'sync-badge pending';
-      this.syncStatusText.textContent = `Syncing (${pendingItems.length + pendingScoutLogs.length} items)...`;
-      this.manualSyncBtn.setAttribute('disabled', 'true');
-
-      // 1. Sync Scouting Logs
-      for (const log of pendingScoutLogs) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        log.syncStatus = 'synced';
-        await this.db.put('scoutingLogs', log);
-        console.log(`Scouting observation synced to central agronomy system.`);
-      }
-
-      // 2. Sync Recommendations
-      for (const item of pendingItems) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        item.status = 'synced';
-        item.syncedAt = new Date().toISOString();
-        await this.db.put('syncQueue', item);
-        console.log(`Recommendation synced.`);
-      }
-
-      this.syncInProgress = false;
-      this.lastSyncedTimestamp = new Date();
-      this.syncStatusBadge.className = 'sync-badge';
-      this.syncStatusText.textContent = 'Synced';
-      this.manualSyncBtn.removeAttribute('disabled');
-      
-      if (this.lastSyncedEl) {
-        this.lastSyncedEl.textContent = `Last synced: ${this.lastSyncedTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      }
-
-      await this.refreshSyncQueueUI();
-      
-      // Reload observations to update sync status icons if currently viewing a field
-      if (this.selectedFieldId) {
-        const field = this.fields.find(f => f.id === this.selectedFieldId);
-        if (field) await this.loadFieldObservations(field);
-      }
-      
-      this.showToast('Synchronization Completed', false);
-    } catch (err) {
-      console.error('Sync error:', err);
-      this.syncInProgress = false;
-      this.showToast('Sync failed — will auto-retry online', true);
-    }
+    // No backend is configured. Never fabricate server acknowledgements.
+    this.updateOnlineStatus();
+    await this.drafts.render();
   }
-
   /**
    * Refresh sync queue list display
    */
-  async refreshSyncQueueUI() {
-    try {
-      const queue = await this.db.getSyncQueue();
-      this.syncQueueList.innerHTML = '';
-      
-      queue.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      const pendingCount = queue.filter(item => item.status === 'pending').length;
-      this.queueCount.textContent = `(${pendingCount})`;
-      
-      if (pendingCount > 0 && this.isOnline) {
-        this.syncStatusBadge.className = 'sync-badge pending';
-        this.syncStatusText.textContent = 'Pending Sync';
-      }
-
-      if (queue.length === 0) {
-        this.syncQueueList.innerHTML = '<div class="download-status-text" style="text-align: center; padding: 1rem; color: var(--text-muted);">Sync queue is empty.</div>';
-        return;
-      }
-
-      queue.forEach((item) => {
-        const card = document.createElement('div');
-        card.className = `sync-item-card ${item.status}`;
-        
-        const formattedTime = new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        card.innerHTML = `
-          <div class="sync-item-header">
-            <span>${item.productName}</span>
-            <span class="sync-item-badge ${item.status}">${item.status === 'pending' ? '⏳ Pending' : '✓ Synced'}</span>
-          </div>
-          <div style="font-size: 0.75rem; color: var(--text-muted);">${item.growerName} → ${item.fieldName}</div>
-          <div class="sync-item-details">
-            <span>Rate: ${item.rate} ${item.unit}/ac</span>
-            <strong style="color: var(--primary);">$${item.cost.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</strong>
-          </div>
-          <div class="sync-item-time">Created: ${formattedTime}${item.syncedAt ? ` · Synced` : ''}</div>
-        `;
-
-        card.addEventListener('click', () => this.openRecDetailModal(item));
-        this.syncQueueList.appendChild(card);
-      });
-    } catch (err) {
-      console.error('Error refreshing sync queue:', err);
-    }
+  async refreshSyncQueueUI() { 
+    await this.drafts.render();
   }
-
   /**
    * Recommendation modal triggers
    */
   openRecommendationModal() {
-    const field = this.fields.find(f => f.id === this.selectedFieldId);
-    if (!field) return;
-
-    this.recommendationForm.reset();
-    this.recProduct.setAttribute('disabled', 'true');
-    this.recProduct.innerHTML = '<option value="">-- Select Category First --</option>';
-    this.recUnit.value = '-';
-    
-    this.recFieldInput.value = field.name;
-    this.calcAcreage.textContent = `${field.acreage} acres`;
-    this.calcUnitPrice.textContent = '$0.00';
-    this.calcTotalQty.textContent = '0 units';
-    this.calcTotalCost.textContent = '$0.00';
-
-    this.recModal.classList.add('open');
+    return this.drafts.open();
   }
-
   closeRecommendationModal() {
-    this.recModal.classList.remove('open');
+    return this.drafts?.close();
   }
-
   /**
    * Populate product selection catalog
    */
@@ -1159,103 +1021,23 @@ class TerraSyncApp {
    * Cost calculation calculator updates
    */
   calculateRecommendationCost() {
-    const field = this.fields.find(f => f.id === this.selectedFieldId);
-    const category = this.recProductType.value;
-    const productId = this.recProduct.value;
-    const rate = parseFloat(this.recRate.value) || 0;
-
-    if (!field || !category || !productId || rate <= 0) {
-      this.calcUnitPrice.textContent = '$0.00';
-      this.calcTotalQty.textContent = '0 units';
-      this.calcTotalCost.textContent = '$0.00';
-      return;
-    }
-
-    const items = this.products[category];
-    const product = items.find(p => p.id === productId);
-    if (!product) return;
-
-    const unit = product.unit;
-    this.recUnit.value = unit;
-
-    const unitPrice = product.pricePerUnit;
-    this.calcUnitPrice.textContent = `$${unitPrice.toFixed(2)} / ${unit}`;
-
-    const totalQty = rate * field.acreage;
-    this.calcTotalQty.textContent = `${totalQty.toFixed(1)} ${unit}s`;
-
-    const totalCost = totalQty * unitPrice;
-    this.calcTotalCost.textContent = `$${totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    this.drafts?.updateEstimate();
   }
-
   /**
    * Saves Recommendation to Offline IndexedDB Sync Queue
    */
   async saveRecommendation() {
-    try {
-      const field = this.fields.find(f => f.id === this.selectedFieldId);
-      const category = this.recProductType.value;
-      const productId = this.recProduct.value;
-      const rate = parseFloat(this.recRate.value) || 0;
-      const notes = this.recNotes.value;
-
-      if (!field || !category || !productId || rate <= 0) {
-        this.showToast('Please fill in required fields', true);
-        return;
-      }
-
-      const items = this.products[category];
-      const product = items.find(p => p.id === productId);
-      
-      const unitPrice = product.pricePerUnit;
-      const totalQty = rate * field.acreage;
-      const totalCost = totalQty * unitPrice;
-
-      const grower = this.growers.find(g => g.id === this.selectedGrowerId);
-
-      const recommendation = {
-        growerId: this.selectedGrowerId,
-        growerName: grower ? grower.name : '',
-        fieldId: this.selectedFieldId,
-        fieldName: field.name,
-        fieldAcreage: field.acreage,
-        crop: field.crop,
-        variety: field.variety || 'Unknown',
-        category,
-        categoryLabel: category === 'fertilizers' ? 'Fertilizer Application' : category === 'chemicals' ? 'Chemical Prescription' : 'Seeding Prescription',
-        productId,
-        productName: product.name,
-        rate,
-        unit: product.unit,
-        unitPrice,
-        totalQty,
-        cost: totalCost,
-        notes
-      };
-
-      await this.db.addToSyncQueue(recommendation);
-
-      this.closeRecommendationModal();
-      this.showToast('Sales recommendation queued for grower', false);
-      
-      await this.refreshSyncQueueUI();
-      
-      if (this.isOnline) {
-        this.triggerSync();
-      }
-    } catch (err) {
-      console.error('Error saving recommendation:', err);
-      this.showToast('Failed to save recommendation', true);
-    }
+    await this.drafts.finish();
   }
-
   /**
    * Opens printable recommendation invoice detail overlay
    */
   openRecDetailModal(item) {
     if (!this.recDetailOverlay) return;
 
-    const grower = this.growers.find(g => g.id === item.growerId);
+    item = Object.fromEntries(Object.entries(item).map(([k, v]) => [k, typeof v === 'string' ? escapeHTML(v) : v]));
+    const rawGrower = this.growers.find(g => g.id === item.growerId);
+    const grower = rawGrower ? Object.fromEntries(Object.entries(rawGrower).map(([k, v]) => [k, typeof v === 'string' ? escapeHTML(v) : v])) : null;
     const growerName = item.growerName || (grower ? grower.name : 'Unknown');
     const growerContact = grower ? grower.contactName : '';
     const growerPhone = grower ? grower.phone : '';
@@ -1267,7 +1049,7 @@ class TerraSyncApp {
     const docContent = this.recDetailOverlay.querySelector('.rec-detail-modal');
     docContent.innerHTML = `
       <div class="modal-header">
-        <h3>Agronomic Recommendation Summary</h3>
+        <h3>${item.documentType === 'sales' ? 'Sales Draft' : 'Recommendation Draft'}</h3>
         <button class="modal-close" id="closeDetailOverlayBtn">&times;</button>
       </div>
       <div class="print-document" id="printableDocument">
@@ -1279,7 +1061,7 @@ class TerraSyncApp {
           <div class="doc-date">
             <div><strong>Date:</strong> ${createdDate}</div>
             <div><strong>Time:</strong> ${createdTime}</div>
-            <div><strong>Status:</strong> ${item.status === 'synced' ? '✓ Synced with Cloud' : '⏳ Unsynced Local Draft'}</div>
+            <div><strong>Status:</strong> Local draft · not sent or approved</div>
           </div>
         </div>
 
@@ -1299,7 +1081,7 @@ class TerraSyncApp {
           </div>
         </div>
 
-        <h2 style="margin-top: 1.5rem;">Recommended Agronomic Prescription</h2>
+        <p class="document-disclaimer">DRAFT — for discussion only. Sample catalog; prices and application suitability require consultant verification. Not an approved order or application instruction.</p><h2 style="margin-top: 1.5rem;">Proposed Program Estimate</h2>
         <table>
           <thead>
             <tr>
@@ -1356,6 +1138,7 @@ class TerraSyncApp {
     `;
 
     this.recDetailOverlay.classList.add('open');
+    this.recDetailOverlay.inert = false;
 
     // Register overlay close events dynamically
     document.getElementById('closeDetailOverlayBtn').addEventListener('click', () => this.closeRecDetailModal());
@@ -1366,6 +1149,7 @@ class TerraSyncApp {
   closeRecDetailModal() {
     if (this.recDetailOverlay) {
       this.recDetailOverlay.classList.remove('open');
+      this.recDetailOverlay.inert = true;
     }
   }
 
@@ -1399,6 +1183,7 @@ class TerraSyncApp {
   }
 
   startGpsSimulation() {
+    if (!this.map) return;
     const field = this.fields.find(f => f.id === this.selectedFieldId);
     if (!field) return;
 
@@ -1420,7 +1205,7 @@ class TerraSyncApp {
       fillOpacity: 1.0
     }).addTo(this.map);
 
-    this.gpsMarker.bindTooltip("Consultant GPS Location", { permanent: false });
+    this.gpsMarker.bindTooltip("Simulated location — not device GPS", { permanent: false });
     this.map.panTo(startCoord);
 
     this.gpsCoordText.textContent = `Lat: ${startCoord[0].toFixed(5)}, Lng: ${startCoord[1].toFixed(5)}`;
@@ -1438,7 +1223,7 @@ class TerraSyncApp {
       }
     }, 800);
 
-    this.showToast('GPS tracking active — walking field perimeter', false);
+    this.showToast('Demo animation — not your actual GPS location', false);
   }
 
   /**
@@ -1473,7 +1258,7 @@ class TerraSyncApp {
 
     this.simGpsBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-      Walk Perimeter
+      Demo perimeter walk
     `;
     this.simGpsBtn.style.borderColor = '';
     this.gpsCoordText.textContent = 'GPS: Idle';
