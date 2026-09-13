@@ -9,8 +9,9 @@ const escapeHTML = window.escapeHTML || (value => String(value ?? '').replace(/[
 class TerraSyncApp {
   constructor() {
     this.db = window.AppDB;
-    this.map = null;
-    this.tileLayer = null;
+    this.config = window.TERRASYNC_CONFIG || {};
+    this.mapController = null;
+    this.locationService = null;
     
     // Header Info
     this.consultantNameEl = document.getElementById('consultantName');
@@ -29,11 +30,16 @@ class TerraSyncApp {
     this.manualSyncBtn = document.getElementById('manualSyncBtn');
     this.offlineBanner = document.getElementById('offlineBanner');
     
-    // Map overlay elements
+    // Map overlay & location elements
     this.downloadMapBtn = document.getElementById('downloadMapBtn');
     this.downloadProgressBar = document.getElementById('downloadProgressBar');
     this.downloadProgressFill = document.getElementById('downloadProgressFill');
     this.downloadStatusText = document.getElementById('downloadStatusText');
+    this.locateMeBtn = document.getElementById('locateMeBtn');
+    this.followLocationBtn = document.getElementById('followLocationBtn');
+    this.locationStatusBadge = document.getElementById('locationStatusBadge');
+    this.locationAccuracyText = document.getElementById('locationAccuracyText');
+    this.fieldDistanceText = document.getElementById('fieldDistanceText');
     this.simGpsBtn = document.getElementById('simGpsBtn');
     this.gpsCoordText = document.getElementById('gpsCoordText');
     this.mapToast = document.getElementById('mapToast');
@@ -63,6 +69,8 @@ class TerraSyncApp {
     this.scoutSeverity = document.getElementById('scoutSeverity');
     this.scoutNote = document.getElementById('scoutNote');
     this.scoutAction = document.getElementById('scoutAction');
+    this.attachDeviceLocationCheckbox = document.getElementById('attachDeviceLocationCheckbox');
+    this.obsLocationHelpText = document.getElementById('obsLocationHelpText');
     
     // Recommendation Modal elements
     this.recModal = document.getElementById('recommendationModal');
@@ -101,6 +109,8 @@ class TerraSyncApp {
     this.gpsInterval = null;
     this.gpsRouteCoords = [];
     this.gpsRouteIndex = 0;
+    this.simulationCurrentPoint = null;
+    this.simulationTrack = [];
     
     this.layerNdviBtn = document.getElementById('layerNdviBtn');
     this.layerSoilBtn = document.getElementById('layerSoilBtn');
@@ -127,10 +137,9 @@ class TerraSyncApp {
       // 3. Load from IndexedDB
       await this.loadStateFromDB();
 
-      // 4. Initialize Leaflet Map
+      // 4. Initialize Map Controller & Location Service
       this.drafts = new DraftWorkspace(this);
-      if (window.L) this.initMap();
-      else document.getElementById('map').textContent = 'Map unavailable. Grower data and drafts are still available.';
+      await this.initMapControllerAndLocation();
 
       // 5. Setup UI listeners
       this.setupEventListeners();
@@ -242,24 +251,177 @@ class TerraSyncApp {
   }
 
   /**
-   * Initialize Leaflet Map
+   * Initializes MapController and LocationService with error boundaries
    */
-  initMap() {
-    const defaultCenter = [42.0266, -93.6465]; // Ames, Iowa
+  async initMapControllerAndLocation() {
+    // 1. Initialize LocationService
+    if (window.LocationService) {
+      this.locationService = new window.LocationService({
+        options: {
+          timeout: this.config.locationTimeoutMs || 15000,
+          staleThresholdMs: this.config.staleLocationThresholdMs || 30000,
+          lowAccuracyThresholdM: this.config.lowAccuracyThresholdM || 50
+        }
+      });
+      this.locationService.subscribe((state) => this.handleLocationStateChange(state));
+    }
+
+    // 2. Initialize MapController
+    if (window.MapController) {
+      try {
+        this.mapController = new window.MapController(this.config);
+        const mountedType = await this.mapController.init('map');
+        
+        this.mapController.onFieldSelected((fieldId) => this.selectField(fieldId));
+        this.mapController.onMapPanned(() => {
+          if (this.locationService) this.locationService.suspendFollow();
+        });
+        this.mapController.onAdapterChanged((type) => {
+          const isGoogle = type === 'google';
+          this.showToast(isGoogle ? 'Google Maps Online active' : 'Offline Field View active (boundaries only)', false);
+        });
+
+        console.log(`Map mounted with adapter: ${mountedType}`);
+      } catch (err) {
+        console.warn('MapController failed to initialize:', err);
+        const mapEl = document.getElementById('map');
+        if (mapEl) {
+          mapEl.textContent = 'Map view could not load. Field records and recommendations remain available.';
+        }
+      }
+    }
+  }
+
+  async handleLocateMe() {
+    if (!this.locationService) {
+      this.showToast('Location service unavailable in this browser.', true);
+      return;
+    }
+    try {
+      this.showToast('Requesting device GPS position...', false);
+      const loc = await this.locationService.getCurrentPosition();
+      this.showToast(`Location acquired (±${loc.accuracyM || 0}m)`, false);
+
+      if (this.mapController) {
+        this.mapController.setLocation(loc);
+        this.mapController.panTo(loc.latitude, loc.longitude);
+      }
+
+      if (this.selectedFieldId) {
+        const field = this.fields.find(f => f.id === this.selectedFieldId);
+        if (field) this.updateFieldProximity(field);
+      }
+    } catch (err) {
+      this.showToast(err.message || 'Unable to obtain GPS location.', true);
+    }
+  }
+
+  handleToggleFollow() {
+    if (!this.locationService) return;
+    const state = this.locationService.getState();
+    if (state.isFollowing) {
+      this.locationService.stopWatch();
+      this.showToast('Stopped following device location.', false);
+    } else {
+      this.locationService.startWatch();
+      this.showToast('Following device location.', false);
+    }
+  }
+
+  handleLocationStateChange(state) {
+    if (!this.locationStatusBadge) return;
+
+    this.locationStatusBadge.className = `location-badge ${state.status}`;
     
-    this.map = L.map('map', {
-      center: defaultCenter,
-      zoom: 13,
-      zoomControl: true,
-      attributionControl: true
-    });
+    let statusLabel = 'Location: Idle';
+    let detailLabel = 'Click "Locate Me" for real GPS fix';
 
-    this.tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(this.map);
+    if (state.status === 'locating') {
+      statusLabel = 'Locating...';
+      detailLabel = 'Acquiring satellite / browser fix...';
+    } else if (state.status === 'current') {
+      statusLabel = state.isLowAccuracy ? 'GPS: Low Accuracy' : 'GPS: Active';
+      const timeStr = state.lastFixTime ? new Date(state.lastFixTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+      detailLabel = `Fix at ${timeStr} · ±${state.accuracyM || '?'}m`;
+    } else if (state.status === 'stale') {
+      statusLabel = 'GPS: Stale Fix';
+      detailLabel = `Last fix > 30s ago (±${state.accuracyM || '?'}m)`;
+    } else if (state.status === 'permission-denied') {
+      statusLabel = 'GPS: Denied';
+      detailLabel = 'Permission denied. You can still enter observations.';
+    } else if (state.status === 'timeout') {
+      statusLabel = 'GPS: Timeout';
+      detailLabel = 'Location request timed out. Retrying...';
+    } else if (state.status === 'unavailable') {
+      statusLabel = 'GPS: Unavailable';
+      detailLabel = state.errorMessage || 'Position unavailable.';
+    }
 
-    L.control.scale({ position: 'bottomleft' }).addTo(this.map);
+    this.locationStatusBadge.textContent = statusLabel;
+    if (this.locationAccuracyText) {
+      this.locationAccuracyText.textContent = detailLabel;
+    }
+
+    if (this.followLocationBtn) {
+      this.followLocationBtn.classList.toggle('btn-primary', state.isFollowing);
+      this.followLocationBtn.textContent = state.isFollowing ? 'Following' : 'Follow';
+    }
+
+    // Forward location to map
+    if (this.mapController) {
+      this.mapController.setLocation(state.location);
+      this.mapController.setFollowLocation(state.isFollowing);
+    }
+
+    // Update field proximity if field selected
+    if (this.selectedFieldId) {
+      const field = this.fields.find(f => f.id === this.selectedFieldId);
+      if (field) this.updateFieldProximity(field);
+    }
+
+    // Update observation modal location helper
+    this.updateObservationLocationHelper(state);
+  }
+
+  updateFieldProximity(field) {
+    if (!this.fieldDistanceText || !field || !window.TerraSyncGeo) return;
+    const loc = this.locationService?.getState()?.location;
+    if (!loc || typeof loc.latitude !== 'number' || !Array.isArray(field.polygon)) {
+      this.fieldDistanceText.style.display = 'none';
+      return;
+    }
+
+    try {
+      const centroid = window.TerraSyncGeo.calculateCentroid(field.polygon);
+      const distM = window.TerraSyncGeo.haversineDistance(loc.latitude, loc.longitude, centroid[0], centroid[1]);
+      const inside = window.TerraSyncGeo.isPointInPolygon([loc.latitude, loc.longitude], field.polygon);
+      const formattedDist = window.TerraSyncGeo.formatStraightLineDistance(distM);
+
+      this.fieldDistanceText.style.display = 'block';
+      this.fieldDistanceText.innerHTML = inside
+        ? `📍 <span style="color:var(--primary); font-weight:600;">Inside field boundary</span> (${formattedDist} to center)`
+        : `📍 ${formattedDist} to field center`;
+    } catch {
+      this.fieldDistanceText.style.display = 'none';
+    }
+  }
+
+  updateObservationLocationHelper(state) {
+    if (!this.obsLocationHelpText) return;
+    if (state && state.location && state.status !== 'permission-denied') {
+      const lat = state.location.latitude.toFixed(5);
+      const lng = state.location.longitude.toFixed(5);
+      const acc = state.location.accuracyM ? ` (±${state.location.accuracyM}m)` : '';
+      this.obsLocationHelpText.textContent = `Fix: ${lat}, ${lng}${acc} [source: device GPS]`;
+    } else if (this.simulationCurrentPoint) {
+      const lat = this.simulationCurrentPoint.latitude.toFixed(5);
+      const lng = this.simulationCurrentPoint.longitude.toFixed(5);
+      this.obsLocationHelpText.textContent = `Simulation: ${lat}, ${lng} [source: sample demo]`;
+    } else if (state && state.status === 'permission-denied') {
+      this.obsLocationHelpText.textContent = 'Location permission denied. Observation will be saved unlocated.';
+    } else {
+      this.obsLocationHelpText.textContent = 'No device GPS fix yet. Observation will be saved unlocated.';
+    }
   }
 
   /**
@@ -339,9 +501,13 @@ class TerraSyncApp {
     });
 
     // Cache Map tiles
-    this.downloadMapBtn.addEventListener('click', () => {
-      this.simulateMapCache();
-    });
+    // Device Location controls
+    if (this.locateMeBtn) {
+      this.locateMeBtn.addEventListener('click', () => this.handleLocateMe());
+    }
+    if (this.followLocationBtn) {
+      this.followLocationBtn.addEventListener('click', () => this.handleToggleFollow());
+    }
 
     // Map Layers
     if (this.layerNdviBtn) {
@@ -543,20 +709,12 @@ class TerraSyncApp {
       this.layerSoilBtn.classList.add('btn-secondary');
     }
 
-    // Zoom and highlight polygon
-    const polygon = this.mapPolygons[field.id];
-    if (polygon) {
-      this.map.fitBounds(polygon.getBounds(), { padding: [50, 50], maxZoom: 16 });
-      
-      Object.keys(this.mapPolygons).forEach(id => {
-        const poly = this.mapPolygons[id];
-        poly.setStyle({
-          weight: id === fieldId ? 4 : 2,
-          color: id === fieldId ? '#10b981' : '#4b5563',
-          fillOpacity: id === fieldId ? 0.3 : 0.1
-        });
-      });
+    // Zoom and highlight polygon via MapController
+    if (this.mapController) {
+      this.mapController.setSelectedField(field.id);
+      this.mapController.fitToField(field.id);
     }
+    this.updateFieldProximity(field);
 
     this.stopGpsSimulation();
     this.showToast(`Active Field: ${field.name}`, false);
@@ -576,57 +734,18 @@ class TerraSyncApp {
     combinedObs.sort((a, b) => new Date(b.date) - new Date(a.date));
     
     this.renderScoutingLogs(combinedObs);
-    this.renderScoutingMarkersOnMap(field, fieldLocalObs);
+    if (this.mapController) {
+      this.mapController.setObservations(combinedObs);
+    }
   }
 
   /**
-   * Renders growers fields boundaries as polygons
+   * Renders growers fields boundaries as polygons via MapController
    */
   renderFieldsOnMap(growerFields) {
-    if (!this.map) return;
-    Object.values(this.mapPolygons).forEach(p => this.map.removeLayer(p));
-    this.mapPolygons = {};
-
-    this.mapMarkers.forEach(m => this.map.removeLayer(m));
-    this.mapMarkers = [];
-
-    const cropColors = {
-      'Corn': '#f59e0b',
-      'Soybeans': '#10b981',
-      'Wheat': '#8b5cf6'
-    };
-
-    growerFields.forEach(field => {
-      const color = cropColors[field.crop] || '#3b82f6';
-      
-      const polygon = L.polygon(field.polygon, {
-        color: '#4b5563',
-        weight: 2,
-        fillColor: color,
-        fillOpacity: 0.1,
-        className: `field-polygon-${field.id}`
-      }).addTo(this.map);
-
-      this.mapPolygons[field.id] = polygon;
-
-      polygon.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        this.selectField(field.id);
-      });
-
-      polygon.bindTooltip(field.name, {
-        permanent: true,
-        direction: 'center',
-        className: 'field-label-overlay'
-      });
-
-      // Render default seeded markers
-      if (field.scoutingHistory) {
-        field.scoutingHistory.forEach(pin => {
-          this.createObservationMarker(pin);
-        });
-      }
-    });
+    if (this.mapController) {
+      this.mapController.setFields(growerFields);
+    }
   }
 
   /**
@@ -645,9 +764,6 @@ class TerraSyncApp {
       this.layerNdviBtn.classList.add('btn-secondary');
       this.layerSoilBtn.classList.remove('btn-primary');
       this.layerSoilBtn.classList.add('btn-secondary');
-      // Reset polygon
-      const poly = this.mapPolygons[this.selectedFieldId];
-      if (poly) poly.setStyle({ fillOpacity: 0.3, fillColor: '#10b981' }); // Default active color
       return;
     }
 
@@ -657,90 +773,19 @@ class TerraSyncApp {
     this.layerSoilBtn.classList.remove('btn-primary');
     this.layerSoilBtn.classList.add('btn-secondary');
     
+    const field = this.fields.find(f => f.id === this.selectedFieldId);
     if (layerType === 'ndvi') {
       this.layerNdviBtn.classList.remove('btn-secondary');
       this.layerNdviBtn.classList.add('btn-primary');
+      this.showToast(`NDVI Layer Active (Score: ${field ? field.ndvi : '0.0'})`, false);
     } else {
       this.layerSoilBtn.classList.remove('btn-secondary');
       this.layerSoilBtn.classList.add('btn-primary');
-    }
-    
-    this.renderActiveMapLayer();
-  }
-
-  renderActiveMapLayer() {
-    if (!this.activeMapLayer || !this.selectedFieldId) return;
-    
-    const field = this.fields.find(f => f.id === this.selectedFieldId);
-    const poly = this.mapPolygons[this.selectedFieldId];
-    if (!poly || !field) return;
-    
-    if (this.activeMapLayer === 'ndvi') {
-       // Green to red heat map simulation based on NDVI score
-       const color = field.ndvi > 0.7 ? '#10b981' : (field.ndvi > 0.5 ? '#f59e0b' : '#ef4444');
-       poly.setStyle({ fillColor: color, fillOpacity: 0.7 });
-       this.showToast(`NDVI Layer Active (Score: ${field.ndvi})`, false);
-    } else if (this.activeMapLayer === 'soil') {
-       // Brown/earth tone simulation for Soil Topography
-       poly.setStyle({ fillColor: '#8b4513', fillOpacity: 0.6 });
-       this.showToast(`Soil Layer Active: ${field.soilType}`, false);
+      this.showToast(`Soil Layer Active: ${field ? field.soilType : 'Unknown'}`, false);
     }
   }
 
-  /**
-   * Renders local field markers
-   */
-  renderScoutingMarkersOnMap(field, localObs) {
-    if (!this.map) return;
-    // Remove existing markers
-    this.mapMarkers.forEach(m => this.map.removeLayer(m));
-    this.mapMarkers = [];
 
-    // Render seeded markers
-    if (field.scoutingHistory) {
-      field.scoutingHistory.forEach(pin => {
-        this.createObservationMarker(pin);
-      });
-    }
-
-    // Render local markers
-    localObs.forEach(pin => {
-      this.createObservationMarker(pin);
-    });
-  }
-
-  /**
-   * Helper to draw a circle marker on leaflet
-   */
-  createObservationMarker(pin) {
-    pin = Object.fromEntries(Object.entries(pin).map(([k, v]) => [k, typeof v === 'string' ? escapeHTML(v) : v]));
-    if (!pin.lat || !pin.lng) return;
-    
-    const pinColor = pin.severity === 'High' ? '#ef4444' : pin.severity === 'Medium' ? '#f59e0b' : '#10b981';
-
-    const marker = L.circleMarker([pin.lat, pin.lng], {
-      radius: 8,
-      fillColor: pinColor,
-      color: '#ffffff',
-      weight: 2,
-      fillOpacity: 0.9
-    }).addTo(this.map);
-
-    const severityBadge = `<span class="scouting-severity ${pin.severity}">${pin.severity} Priority</span>`;
-    const actionStr = pin.actionTaken ? `<div style="font-size: 0.75rem; color:#f8fafc; margin-top: 4px;"><strong>Action:</strong> ${pin.actionTaken}</div>` : '';
-    
-    marker.bindPopup(`
-      <div style="font-family: var(--font-family); min-width: 160px;">
-        <h5 style="font-weight: 700; margin-bottom: 2px;">${pin.issue}</h5>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 4px;">Category: ${pin.category} | ${pin.date}</div>
-        ${severityBadge}
-        <p style="font-size: 0.75rem; margin-top: 6px; color:#94a3b8; line-height: 1.3;">${pin.note}</p>
-        ${actionStr}
-      </div>
-    `);
-
-    this.mapMarkers.push(marker);
-  }
 
   /**
    * Render NPK bar charts
@@ -850,12 +895,21 @@ class TerraSyncApp {
       
       const actionBadge = obs.actionTaken ? `<div style="font-size:0.7rem; color:var(--text-primary); margin-top:0.25rem;">📝 Action: ${obs.actionTaken}</div>` : '';
       
+      let locBadge = '';
+      if (raw.location && raw.location.source) {
+        locBadge = ` · <span style="color:var(--primary); font-weight:500;">📍 ${escapeHTML(raw.location.source)}</span>`;
+      } else if (raw.lat && raw.lng) {
+        locBadge = ` · <span style="color:var(--text-muted);">📍 located</span>`;
+      } else {
+        locBadge = ` · <span style="color:var(--text-muted); font-style:italic;">unlocated</span>`;
+      }
+
       div.innerHTML = `
         <div style="flex: 1;">
           <strong style="display:block; margin-bottom: 2px;">${obs.issue}</strong>
           <span style="color: var(--text-secondary);">${obs.note}</span>
           <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.25rem;">
-            📅 ${obs.date} | Category: ${obs.category}
+            📅 ${obs.date} | Category: ${obs.category}${locBadge}
           </div>
           ${actionBadge}
         </div>
@@ -874,6 +928,19 @@ class TerraSyncApp {
 
     this.scoutingForm.reset();
     this.scoutFieldInput.value = field.name;
+
+    const locState = this.locationService ? this.locationService.getState() : { location: null, status: 'idle' };
+    if (this.attachDeviceLocationCheckbox) {
+      if (locState.location && locState.status !== 'permission-denied') {
+        this.attachDeviceLocationCheckbox.checked = true;
+      } else if (this.simulationCurrentPoint) {
+        this.attachDeviceLocationCheckbox.checked = true;
+      } else {
+        this.attachDeviceLocationCheckbox.checked = false;
+      }
+    }
+    this.updateObservationLocationHelper(locState);
+
     this.scoutingModal.classList.add('open');
     this.scoutingModal.inert = false;
     this.scoutIssue.focus();
@@ -901,14 +968,37 @@ class TerraSyncApp {
         return;
       }
 
-      // Default GPS coords to field boundary starting coordinate or active GPS walk simulation point
-      let lat = field.polygon[0][0];
-      let lng = field.polygon[0][1];
+      // Explicit location provenance: device, sample, or null
+      // Never fall back to field polygon vertices as coordinates
+      let location = null;
+      let lat = null;
+      let lng = null;
 
-      if (this.gpsMarker) {
-        const gpsLatLng = this.gpsMarker.getLatLng();
-        lat = gpsLatLng.lat;
-        lng = gpsLatLng.lng;
+      const attachLocation = this.attachDeviceLocationCheckbox ? this.attachDeviceLocationCheckbox.checked : false;
+
+      if (attachLocation) {
+        const locState = this.locationService ? this.locationService.getState() : null;
+        if (locState && locState.location && locState.status !== 'permission-denied') {
+          location = {
+            latitude: locState.location.latitude,
+            longitude: locState.location.longitude,
+            accuracyM: locState.location.accuracyM || null,
+            capturedAt: locState.location.capturedAt || new Date().toISOString(),
+            source: 'device'
+          };
+          lat = location.latitude;
+          lng = location.longitude;
+        } else if (this.simulationCurrentPoint) {
+          location = {
+            latitude: this.simulationCurrentPoint.latitude,
+            longitude: this.simulationCurrentPoint.longitude,
+            accuracyM: 5,
+            capturedAt: new Date().toISOString(),
+            source: 'sample'
+          };
+          lat = location.latitude;
+          lng = location.longitude;
+        }
       }
 
       const observation = {
@@ -921,7 +1011,8 @@ class TerraSyncApp {
         actionTaken: actionText || 'Noted',
         date: new Date().toISOString().split('T')[0],
         lat: lat,
-        lng: lng
+        lng: lng,
+        location: location
       };
 
       await this.db.addScoutingLog(observation);
@@ -1183,44 +1274,58 @@ class TerraSyncApp {
   }
 
   startGpsSimulation() {
-    if (!this.map) return;
+    if (!this.mapController) return;
     const field = this.fields.find(f => f.id === this.selectedFieldId);
-    if (!field) return;
+    if (!field || !Array.isArray(field.polygon) || field.polygon.length < 3) {
+      this.showToast('Select a field to run demo walk simulation', true);
+      return;
+    }
 
     this.gpsRouteCoords = this.interpolatePolygonPath(field.polygon, 20);
     this.gpsRouteIndex = 0;
     
     this.simGpsBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      Stop Tracking
+      Stop Simulation
     `;
     this.simGpsBtn.style.borderColor = '#ef4444';
 
     const startCoord = this.gpsRouteCoords[0];
-    this.gpsMarker = L.circleMarker(startCoord, {
-      radius: 10,
-      fillColor: '#3b82f6',
-      color: '#ffffff',
-      weight: 3,
-      fillOpacity: 1.0
-    }).addTo(this.map);
+    this.simulationCurrentPoint = {
+      latitude: startCoord[0],
+      longitude: startCoord[1],
+      accuracyM: 5,
+      capturedAt: new Date().toISOString(),
+      source: 'sample'
+    };
+    this.simulationTrack = [startCoord];
 
-    this.gpsMarker.bindTooltip("Simulated location — not device GPS", { permanent: false });
-    this.map.panTo(startCoord);
+    this.mapController.setLocation(this.simulationCurrentPoint);
+    this.mapController.setTrack(this.simulationTrack);
+    this.mapController.panTo(startCoord[0], startCoord[1]);
 
-    this.gpsCoordText.textContent = `Lat: ${startCoord[0].toFixed(5)}, Lng: ${startCoord[1].toFixed(5)}`;
+    this.gpsCoordText.textContent = `Simulation: Lat ${startCoord[0].toFixed(5)}, Lng ${startCoord[1].toFixed(5)}`;
     this.gpsCoordText.style.color = '#3b82f6';
 
     this.gpsInterval = setInterval(() => {
       this.gpsRouteIndex = (this.gpsRouteIndex + 1) % this.gpsRouteCoords.length;
       const nextCoord = this.gpsRouteCoords[this.gpsRouteIndex];
       
-      this.gpsMarker.setLatLng(nextCoord);
-      this.gpsCoordText.textContent = `Lat: ${nextCoord[0].toFixed(5)}, Lng: ${nextCoord[1].toFixed(5)}`;
-
-      if (!this.map.getBounds().contains(nextCoord)) {
-        this.map.panTo(nextCoord);
+      this.simulationCurrentPoint = {
+        latitude: nextCoord[0],
+        longitude: nextCoord[1],
+        accuracyM: 5,
+        capturedAt: new Date().toISOString(),
+        source: 'sample'
+      };
+      this.simulationTrack.push(nextCoord);
+      if (this.simulationTrack.length > 50) {
+        this.simulationTrack.shift();
       }
+
+      this.mapController.setLocation(this.simulationCurrentPoint);
+      this.mapController.setTrack(this.simulationTrack);
+      this.gpsCoordText.textContent = `Simulation: Lat ${nextCoord[0].toFixed(5)}, Lng ${nextCoord[1].toFixed(5)}`;
     }, 800);
 
     this.showToast('Demo animation — not your actual GPS location', false);
@@ -1251,18 +1356,31 @@ class TerraSyncApp {
       this.gpsInterval = null;
     }
 
-    if (this.gpsMarker) {
-      this.map.removeLayer(this.gpsMarker);
-      this.gpsMarker = null;
+    this.simulationCurrentPoint = null;
+    this.simulationTrack = [];
+
+    if (this.mapController) {
+      const realLoc = this.locationService?.getState()?.location;
+      if (realLoc) {
+        this.mapController.setLocation(realLoc);
+      } else {
+        this.mapController.setLocation(null);
+      }
+      this.mapController.setTrack([]);
     }
 
-    this.simGpsBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-      Demo perimeter walk
-    `;
-    this.simGpsBtn.style.borderColor = '';
-    this.gpsCoordText.textContent = 'GPS: Idle';
-    this.gpsCoordText.style.color = '';
+    if (this.simGpsBtn) {
+      this.simGpsBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        Demo walk (Simulated)
+      `;
+      this.simGpsBtn.style.borderColor = '';
+    }
+
+    if (this.gpsCoordText) {
+      this.gpsCoordText.textContent = 'Simulation: Idle';
+      this.gpsCoordText.style.color = '';
+    }
   }
 }
 

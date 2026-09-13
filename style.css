@@ -1302,6 +1302,108 @@ input:checked + .slider:before {
 .recommendation-modal-overlay:not(.open), .rec-detail-overlay:not(.open) { visibility: hidden; }
 .last-synced { font-size: 12px; line-height: 1.5; }
 #map:empty { background: #eaf0ec; }
+
+/* Location Controls & Badges */
+.location-controls-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.location-btn-row {
+  display: flex;
+  gap: 0.35rem;
+}
+.location-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+.location-badge.current {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #6ee7b7;
+}
+.location-badge.locating {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  animation: pulse 1.5s infinite;
+}
+.location-badge.stale {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+.location-badge.permission-denied, .location-badge.unavailable, .location-badge.timeout {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+/* Offline Field View Banner & Styling */
+.offline-field-view {
+  background-color: #eaf0ec !important;
+}
+.offline-field-banner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 500;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+.offline-svg-canvas {
+  width: 100%;
+  height: 100%;
+  background: #eaf0ec;
+}
+
+/* Footer Legal & Attribution */
+.app-footer {
+  background: var(--bg-surface-opaque);
+  border-top: 1px solid var(--border-glow);
+  padding: 6px 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  z-index: 40;
+}
+.footer-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.footer-inner a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+.footer-inner a:hover {
+  color: var(--primary);
+}
+.footer-sep {
+  opacity: 0.4;
+}
+
 @media (max-width: 1100px) {
   body { height: auto; min-height: 100dvh; overflow: auto; }
   header { flex-wrap: wrap; height: auto; gap: 12px; padding: 16px; }
