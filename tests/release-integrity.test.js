@@ -34,6 +34,8 @@ test('Release integrity: manual offline map and data restore controls are wired'
   assert.match(html, /id="downloadOfflineMapBtn"/);
   assert.match(html, /id="importBackupInput"/);
   assert.match(app, /downloadOfflineMapPack/);
+  assert.match(app, /assets\/ames-offline-basemap\.geojson/);
+  assert.match(read('sw.js'), /assets\/ames-offline-basemap\.geojson/);
   assert.match(drafts, /importBackupFile/);
   assert.doesNotMatch(html, /id="googleApiKeyInput"/);
   assert.match(read('src/maps/google-map-adapter.js'), /if \(!window\.google\?\.maps\)/);
@@ -43,6 +45,14 @@ test('Release integrity: privacy and terms links are public pages', () => {
   const html = read('index.html');
   assert.match(html, /href="terms\.html"/);
   assert.match(html, /href="privacy\.html"/);
+});
+
+test('Release integrity: downloaded street map contains usable vector roads', () => {
+  const basemap = JSON.parse(read('assets/ames-offline-basemap.geojson'));
+  assert.equal(basemap.type, 'FeatureCollection');
+  assert.ok(basemap.features.length > 100, 'Expected a useful offline road network');
+  assert.ok(basemap.features.some(feature => feature.properties?.name), 'Expected named roads');
+  assert.match(basemap.attribution, /U\.S\. Census Bureau TIGER\/Line/);
 });
 
 test('Release integrity: cloud sync assets and secure schema are present', () => {

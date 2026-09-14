@@ -78,10 +78,10 @@ window.TERRASYNC_CONFIG = {
 ## 6. Offline Field Pack and Fallback
 
 If no API key is provided, or if the device is offline, or if Google servers cannot be reached:
-- TerraSync **automatically falls back** to the built-in **Offline Field View**.
+- TerraSync **automatically falls back** to the downloaded **Offline Street Map**.
 - Field polygons, crop identification, observation pins, GPS position, and tracks are rendered with high contrast against a built-in agronomic background.
-- Select **Save field map offline** once while connected to explicitly save all demonstration field geometry and required local map assets on that device.
-- **No Google or OpenStreetMap tiles are requested or cached for offline use**, ensuring provider-policy compliance and reliable operation in zero-coverage fields.
+- Select **Download offline street map** once while connected to save the Ames-area TIGER/Line roads, all demonstration field geometry, and required local map assets on that device.
+- **No Google or OpenStreetMap tiles are requested or cached for offline use**. Satellite imagery remains online-only.
 
 ---
 

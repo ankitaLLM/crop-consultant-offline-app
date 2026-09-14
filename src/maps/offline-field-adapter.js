@@ -3,9 +3,9 @@
  * Implements the MapAdapter interface for zero-network, offline-first field rendering.
  *
  * CRITICAL ARCHITECTURAL GUARANTEES:
- * 1. Zero network basemap tile calls: Never fetches OpenStreetMap, Google, or third-party tiles.
- * 2. Neutral background canvas: Clearly presents saved grower field boundaries, labels,
- *    observation pins, device location, accuracy circle, and tracks.
+ * 1. Zero network basemap tile calls: Never fetches Google, OpenStreetMap, or third-party tiles.
+ * 2. Bundled street vectors: Renders a small, downloaded TIGER/Line road dataset behind saved
+ *    grower field boundaries, labels, observation pins, device location, and tracks.
  * 3. Prominently identifies the locally saved field map.
  * 4. Dual rendering engine: Uses local Leaflet instance without tileLayer when Leaflet is available;
  *    gracefully falls back to pure SVG vector rendering if Leaflet is unavailable.
@@ -41,6 +41,10 @@
       this.container = null;
       this.map = null; // Leaflet instance
       this.tileLayer = null; // Optional online basemap tile layer
+      this.offlineBasemapLayer = null;
+      this.offlineBasemapLabels = null;
+      this.offlineLabelFeatures = [];
+      this.offlineBasemapData = null;
       this.resizeObserver = null;
       this.onWindowResize = null;
       this.basemapEnabled = config.enableOsmOnlineBasemap !== false;
@@ -89,6 +93,7 @@
       } else {
         this._mountSvgEngine();
       }
+      await this._loadOfflineBasemap();
 
       // Automatically keep Leaflet responsive to layout shifts
       if (typeof ResizeObserver !== 'undefined' && this.container) {
@@ -116,12 +121,12 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
         </svg>
-        <span>Offline field map · boundaries and observations</span>
+        <span>Offline street map · roads, fields, and observations</span>
       `;
       this.container.appendChild(this.offlineBanner);
       this.offlineLegend = document.createElement('div');
       this.offlineLegend.className = 'offline-field-legend';
-      this.offlineLegend.innerHTML = '<strong>Saved on this device</strong><span>Field outlines · crop color · scouting pins · GPS track</span>';
+      this.offlineLegend.innerHTML = '<strong>Downloaded on this device</strong><span>Street lines · field outlines · scouting pins · GPS track</span>';
       this.container.appendChild(this.offlineLegend);
     }
 
@@ -183,6 +188,12 @@
         fadeAnimation: false
       });
 
+      this.map.createPane('offlineBasemapPane');
+      this.map.getPane('offlineBasemapPane').style.zIndex = '180';
+      this.map.createPane('offlineBasemapLabelPane');
+      this.map.getPane('offlineBasemapLabelPane').style.zIndex = '190';
+      this.map.getPane('offlineBasemapLabelPane').style.pointerEvents = 'none';
+
       this.map.on('dragstart', () => {
         if (this.mapPannedCallback) {
           this.mapPannedCallback();
@@ -213,6 +224,76 @@
           }
         }
       }, 120);
+    }
+
+    async _loadOfflineBasemap() {
+      try {
+        const url = new URL('assets/ames-offline-basemap.geojson', document.baseURI);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Offline street map returned ${response.status}`);
+        this.offlineBasemapData = await response.json();
+        if (this.map && window.L) {
+          this.offlineBasemapLayer = window.L.geoJSON(this.offlineBasemapData, {
+            pane: 'offlineBasemapPane',
+            interactive: false,
+            style: feature => this._offlineFeatureStyle(feature)
+          }).addTo(this.map);
+          this.offlineBasemapLayer.bringToBack();
+          const labeled = new Set();
+          this.offlineLabelFeatures = [];
+          for (const feature of this.offlineBasemapData.features || []) {
+            const name = feature.properties?.name;
+            const coords = feature.geometry?.coordinates;
+            if (!name || labeled.has(name) || feature.geometry?.type !== 'LineString' || !coords?.length) continue;
+            labeled.add(name);
+            const [lng, lat] = coords[Math.floor(coords.length / 2)];
+            this.offlineLabelFeatures.push({ name, lat, lng, className: feature.properties?.class || 'local' });
+          }
+          this.offlineBasemapLabels = window.L.layerGroup().addTo(this.map);
+          this.map.on('moveend zoomend', () => this._refreshOfflineLabels());
+          this._refreshOfflineLabels();
+          this.map.attributionControl?.addAttribution('Road data: <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html" target="_blank" rel="noopener">U.S. Census Bureau TIGER/Line</a>');
+        } else if (this.svgContainer) {
+          this._renderSvgView();
+        }
+      } catch (error) {
+        console.warn('[OfflineFieldAdapter] Downloaded street map is unavailable:', error.message);
+      }
+    }
+
+    _offlineFeatureStyle(feature) {
+      const properties = feature?.properties || {};
+      if (properties.kind === 'railway') {
+        return { color: '#64748b', weight: 1.5, opacity: 0.65, dashArray: '5 5' };
+      }
+      const roadStyles = {
+        primary: { color: '#d97706', weight: 4.5, opacity: 0.9 },
+        secondary: { color: '#f59e0b', weight: 3.2, opacity: 0.86 },
+        local: { color: '#94a3b8', weight: 2.2, opacity: 0.9 }
+      };
+      return roadStyles[properties.class] || roadStyles.local;
+    }
+
+    _refreshOfflineLabels() {
+      if (!this.map || !this.offlineBasemapLabels || !window.L) return;
+      this.offlineBasemapLabels.clearLayers();
+      const bounds = this.map.getBounds();
+      const occupied = new Set();
+      const priority = { primary: 0, secondary: 1, local: 2 };
+      const candidates = [...this.offlineLabelFeatures]
+        .filter(item => bounds.contains([item.lat, item.lng]))
+        .sort((a, b) => (priority[a.className] ?? 3) - (priority[b.className] ?? 3));
+      for (const item of candidates) {
+        const point = this.map.latLngToContainerPoint([item.lat, item.lng]);
+        const cell = `${Math.floor(point.x / 240)}:${Math.floor(point.y / 110)}`;
+        if (occupied.has(cell)) continue;
+        occupied.add(cell);
+        this.offlineBasemapLabels.addLayer(window.L.marker([item.lat, item.lng], {
+          pane: 'offlineBasemapLabelPane',
+          interactive: false,
+          icon: window.L.divIcon({ className: 'offline-road-label', html: this._escape(item.name), iconSize: null })
+        }));
+      }
     }
 
     _mountSvgEngine() {
@@ -527,6 +608,14 @@
         this.map.removeLayer(this.tileLayer);
         this.tileLayer = null;
       }
+      if (this.offlineBasemapLayer && this.map) {
+        this.map.removeLayer(this.offlineBasemapLayer);
+        this.offlineBasemapLayer = null;
+      }
+      if (this.offlineBasemapLabels && this.map) {
+        this.map.removeLayer(this.offlineBasemapLabels);
+        this.offlineBasemapLabels = null;
+      }
       if (this.map && window.L) {
         this.map.off();
         this.map.remove();
@@ -537,6 +626,7 @@
       this.locationMarker = null;
       this.accuracyCircle = null;
       this.trackPolyline = null;
+      this.offlineLabelFeatures = [];
 
       if (this.container) {
         this.container.innerHTML = '';
@@ -570,6 +660,24 @@
       grid.setAttribute('stroke-opacity', '0.12');
       grid.setAttribute('fill', 'none');
       this.svgContainer.appendChild(grid);
+
+      for (const feature of this.offlineBasemapData?.features || []) {
+        if (feature.geometry?.type !== 'LineString') continue;
+        const points = feature.geometry.coordinates
+          .filter(point => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+          .map(([lng, lat]) => toSvgCoords(lat, lng));
+        if (points.length < 2) continue;
+        const style = this._offlineFeatureStyle(feature);
+        const road = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        road.setAttribute('points', points.join(' '));
+        road.setAttribute('fill', 'none');
+        road.setAttribute('stroke', style.color);
+        road.setAttribute('stroke-width', String(style.weight * 1.4));
+        road.setAttribute('stroke-opacity', String(style.opacity));
+        if (style.dashArray) road.setAttribute('stroke-dasharray', style.dashArray);
+        road.setAttribute('vector-effect', 'non-scaling-stroke');
+        this.svgContainer.appendChild(road);
+      }
 
       if (this.trackPoints.length > 1) {
         const track = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');

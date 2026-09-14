@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1f2937">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 
@@ -61,13 +61,13 @@
       <div><strong>Your saved work</strong><span id="localRecordSummary" role="status">Opening saved work…</span></div>
       <div class="workspace-statuses">
         <span id="offlineReadiness" class="workspace-chip" role="status">Preparing offline app…</span>
-        <span id="offlineMapStatus" class="workspace-chip" role="status">Offline field map not saved</span>
+        <span id="offlineMapStatus" class="workspace-chip" role="status">Offline street map not downloaded</span>
         <span id="cloudAccountText" class="workspace-chip" role="status">Cloud sign-in available</span>
       </div>
     </div>
     <p class="workspace-explainer">Refreshing this page is safe. Work is saved on this device first; sign in with Google to synchronize it across browsers and devices.</p>
     <div class="storage-actions">
-      <button id="downloadOfflineMapBtn" class="btn" type="button">Save field map offline</button>
+      <button id="downloadOfflineMapBtn" class="btn" type="button">Download offline street map</button>
       <button id="exportDraftsBtn" class="btn" type="button">Download data backup</button>
       <button id="importBackupBtn" class="btn" type="button">Restore data backup</button>
       <input id="importBackupInput" type="file" accept="application/json,.json" hidden>
@@ -166,7 +166,7 @@
         </div>
         <div class="map-tool-card">
           <h4>Map availability</h4>
-          <div id="mapProviderBadge" class="map-provider-badge">Offline Field View</div>
+          <div id="mapProviderBadge" class="map-provider-badge">Offline Street Map</div>
           <button id="configureMapApiKeyBtn" class="btn btn-secondary" style="width: 100%; margin-top: 0.5rem; font-size: 0.75rem; padding: 0.35rem;" aria-label="Configure Map Provider">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
             Map details
@@ -374,8 +374,8 @@
       </div>
       <div class="modal-body map-availability-copy">
         <p><strong>Online:</strong> Google Maps is preconfigured for this prototype. Use its Roadmap, Satellite, or Hybrid controls directly on the map.</p>
-        <p><strong>Offline:</strong> TerraSync shows its own saved field map—field boundaries, labels, observations, GPS position, and tracks. Google and OpenStreetMap imagery cannot be downloaded for offline use under their provider rules.</p>
-        <p>Select <strong>Save field map offline</strong> before leaving coverage. This saves all seven demonstration fields and the application files on this device.</p>
+        <p><strong>Offline:</strong> TerraSync displays a downloaded street map with roads, field boundaries, labels, observations, GPS position, and tracks. Satellite imagery remains online-only.</p>
+        <p>Select <strong>Download offline street map</strong> before leaving coverage. This saves the Ames-area road vectors, all seven demonstration fields, and the application files on this device. Road data: U.S. Census Bureau TIGER/Line.</p>
       </div>
       <div class="modal-footer">
         <button type="button" id="closeApiKeyModalBtn2" class="btn btn-primary">Done</button>
@@ -428,7 +428,7 @@
   <script src="src/geo/geometry.js?v=8"></script>
   <script src="src/location/location-service.js?v=8"></script>
   <script src="src/maps/map-adapter.js?v=8"></script>
-  <script src="src/maps/offline-field-adapter.js?v=12"></script>
+  <script src="src/maps/offline-field-adapter.js?v=15"></script>
   <script src="src/maps/google-map-adapter.js?v=13"></script>
   <script src="src/maps/map-controller.js?v=8"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -437,7 +437,7 @@
   <script src="src/db.js?v=9"></script>
   <script src="src/sync.js?v=11"></script>
   <script src="src/drafts.js?v=12"></script>
-  <script src="src/app.js?v=12"></script>
+  <script src="src/app.js?v=15"></script>
   <script>
     const readiness = document.getElementById('offlineReadiness');
     window.addEventListener('terrasync-db-blocked', () => {
@@ -464,19 +464,20 @@
           await navigator.serviceWorker.ready;
           const core = [
             'index.html',
-            'style.css?v=12',
+            'style.css?v=15',
             'src/config.js?v=12',
             'src/geo/geometry.js?v=8',
             'src/location/location-service.js?v=8',
             'src/maps/map-adapter.js?v=8',
-            'src/maps/offline-field-adapter.js?v=12',
+            'src/maps/offline-field-adapter.js?v=15',
             'src/maps/google-map-adapter.js?v=13',
             'src/maps/map-controller.js?v=8',
             'src/db.js?v=9',
             'src/sync.js?v=11',
             'src/drafts.js?v=12',
-            'src/app.js?v=12',
+            'src/app.js?v=15',
             'src/data.js',
+            'assets/ames-offline-basemap.geojson',
             'terms.html',
             'privacy.html'
           ];

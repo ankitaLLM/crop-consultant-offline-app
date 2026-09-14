@@ -293,7 +293,7 @@ class TerraSyncApp {
         this.mapController.onAdapterChanged((type) => {
           this.updateMapProviderBadge(type);
           const isGoogle = type === 'google';
-          this.showToast(isGoogle ? 'Google Maps Online active' : (this.isOnline ? 'OpenStreetMap Online active' : 'Offline Field View active (boundaries only)'), false);
+          this.showToast(isGoogle ? 'Google Maps Online active' : (this.isOnline ? 'OpenStreetMap Online active' : 'Downloaded offline street map active'), false);
         });
 
         this.updateMapProviderBadge(mountedType);
@@ -694,32 +694,33 @@ class TerraSyncApp {
     if (!this.offlineMapStatus) return;
     const ready = this.fields.filter(field => field.cachedMap).length;
     this.offlineMapStatus.textContent = ready === this.fields.length && ready > 0
-      ? `Offline field map ready · ${ready} fields`
-      : `Offline field map not saved · ${ready}/${this.fields.length} fields`;
+      ? `Offline street map ready · ${ready} fields`
+      : `Offline street map not downloaded · ${ready}/${this.fields.length} fields`;
   }
 
   async downloadOfflineMapPack() {
     if (!this.downloadOfflineMapBtn) return;
     this.downloadOfflineMapBtn.disabled = true;
-    this.downloadOfflineMapBtn.textContent = 'Saving field map…';
+    this.downloadOfflineMapBtn.textContent = 'Downloading street map…';
     try {
-      if (!navigator.onLine) throw new Error('Connect once to save the offline field map.');
+      if (!navigator.onLine) throw new Error('Connect once to download the offline street map.');
       if ('caches' in window) {
-        const cache = await caches.open('terrasync-manual-field-pack-v1');
-        const paths = ['index.html', 'style.css?v=12', 'src/data.js',
-          'src/maps/offline-field-adapter.js?v=12', 'src/maps/map-adapter.js?v=8', 'assets/icon.svg'];
+        const cache = await caches.open('terrasync-manual-street-map-v3');
+        const paths = ['index.html', 'style.css?v=15', 'src/data.js',
+          'src/maps/offline-field-adapter.js?v=15', 'src/maps/map-adapter.js?v=8',
+          'assets/ames-offline-basemap.geojson', 'assets/icon.svg'];
         await cache.addAll(paths.map(path => new Request(new URL(path, location.href), { cache: 'reload' })));
       }
       const savedAt = new Date().toISOString();
       await Promise.all(this.fields.map(field => this.db.put('fields', { ...field, cachedMap: true, cachedMapAt: savedAt })));
       await this.loadStateFromDB();
       this.updateOfflineMapStatus();
-      this.showToast(`Offline field map saved for all ${this.fields.length} demo fields.`, false);
+      this.showToast(`Offline street map downloaded for all ${this.fields.length} demo fields.`, false);
     } catch (error) {
-      this.showToast(error.message || 'Offline field map could not be saved.', true);
+      this.showToast(error.message || 'Offline street map could not be downloaded.', true);
     } finally {
       this.downloadOfflineMapBtn.disabled = false;
-      this.downloadOfflineMapBtn.textContent = 'Save field map offline';
+      this.downloadOfflineMapBtn.textContent = 'Download offline street map';
     }
   }
 
@@ -737,7 +738,7 @@ class TerraSyncApp {
       this.mapProviderBadge.style.background = 'rgba(59, 130, 246, 0.15)';
       this.mapProviderBadge.style.borderColor = 'rgba(59, 130, 246, 0.3)';
     } else {
-      this.mapProviderBadge.textContent = 'Offline Field View';
+      this.mapProviderBadge.textContent = 'Offline Street Map';
       this.mapProviderBadge.style.color = '#f59e0b';
       this.mapProviderBadge.style.background = 'rgba(245, 158, 11, 0.15)';
       this.mapProviderBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';

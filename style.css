@@ -1363,14 +1363,9 @@ input:checked + .slider:before {
   border-color: #fca5a5;
 }
 
-/* Offline Field View Banner & Styling */
+/* Downloaded offline street map */
 .offline-field-view {
-  background-color: #eaf0ec !important;
-  background-image:
-    linear-gradient(32deg, transparent 48%, rgba(42, 100, 67, .11) 49%, rgba(42, 100, 67, .11) 51%, transparent 52%),
-    linear-gradient(122deg, transparent 47%, rgba(104, 117, 94, .1) 48%, rgba(104, 117, 94, .1) 50%, transparent 51%),
-    radial-gradient(circle at 22% 28%, rgba(66, 153, 225, .15) 0 5%, transparent 5.5%),
-    linear-gradient(#eef3ef, #dfe9e1) !important;
+  background: #e8eee9 !important;
 }
 .offline-field-banner {
   position: absolute;
@@ -1414,6 +1409,19 @@ input:checked + .slider:before {
   box-shadow: 0 4px 12px rgba(15, 23, 42, .12);
 }
 .offline-field-legend span { color: #53665a; }
+
+.offline-road-label {
+  width: max-content !important;
+  height: auto !important;
+  margin: 0 !important;
+  transform: translate(-50%, -50%);
+  color: #334155;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+}
 
 .field-label-overlay {
   background: rgba(15, 23, 42, 0.92) !important;

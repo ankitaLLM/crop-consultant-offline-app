@@ -1,24 +1,25 @@
 // Versioned, scope-specific shell. Never cache arbitrary APIs, Google Maps, or other Pages apps.
 const PREFIX = `terrasync-${encodeURIComponent(self.registration.scope)}-`;
-const CACHE = `${PREFIX}v13`;
+const CACHE = `${PREFIX}v15`;
 const CORE = [
   './',
   './index.html',
-  './style.css?v=12',
+  './style.css?v=15',
   './src/config.js?v=12',
   './src/geo/geometry.js?v=8',
   './src/location/location-service.js?v=8',
   './src/maps/map-adapter.js?v=8',
-  './src/maps/offline-field-adapter.js?v=12',
+  './src/maps/offline-field-adapter.js?v=15',
   './src/maps/google-map-adapter.js?v=13',
   './src/maps/map-controller.js?v=8',
   './src/db.js?v=9',
   './src/sync.js?v=11',
   './src/drafts.js?v=12',
-  './src/app.js?v=12',
+  './src/app.js?v=15',
   './src/data.js',
   './manifest.json',
   './assets/icon.svg',
+  './assets/ames-offline-basemap.geojson',
   './assets/offline-tile-placeholder.svg',
   './terms.html',
   './privacy.html'

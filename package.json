@@ -3,6 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "build:offline-map": "node scripts/build-offline-basemap.js",
     "test": "node tests/run-tests.js"
   }
 }

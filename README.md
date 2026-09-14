@@ -11,9 +11,9 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 
 ## Core Capabilities (Release 1)
 
-### 1. Hybrid Map Architecture: Online Google Maps + Offline Field View
+### 1. Hybrid Map Architecture: Online Google Maps + Downloaded Offline Street Map
 - **Google Maps Integration**: The hosted demonstration includes a public, referrer-restricted browser key and renders Google's road, satellite, and hybrid controls online, with custom severity pins and official terms and attribution.
-- **Manual Offline Field Pack**: **Save field map offline** stores the application map assets and marks all seven demonstration field records as ready on that device. Offline mode renders field boundaries, labels, observations, GPS position, and tracks against a built-in vector background. **No Google or OpenStreetMap tiles are downloaded or cached for offline use**, in accordance with provider rules.
+- **Downloadable Offline Street Map**: **Download offline street map** stores a compact Ames-area road dataset from the U.S. Census Bureau TIGER/Line service, the application assets, and all seven demonstration field records on that device. Offline mode renders roads, road names, field boundaries, observations, GPS position, and tracks. **No Google or OpenStreetMap tiles are downloaded or cached for offline use**.
 - **Graceful Error Recovery**: Automatically switches to the offline field view if Google Maps scripts fail to load or are blocked, preserving all field selections and observation state.
 
 ### 2. Real Device Geolocation & Proximity
@@ -31,7 +31,7 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 - Autosaved recommendation and sales drafts with transaction confirmation and conflicting-tab protection.
 - Printable draft estimates with agronomic and pricing disclaimers.
 - JSON backup export and validated restore of device records.
-- Service Worker `v12` caching the application core while explicitly excluding Google and OpenStreetMap tiles and API responses.
+- Service Worker `v15` caching the application core and bundled TIGER/Line street vectors while explicitly excluding Google and OpenStreetMap tiles and API responses.
 
 ### 5. Authenticated Cross-Browser Cloud Sync
 - Google authentication through Supabase and user-scoped PostgreSQL storage.
@@ -46,7 +46,7 @@ Setup is required before cloud sync becomes active. See [docs/cloud-sync-setup.m
 
 ## Configuration & Google Maps Setup
 
-TerraSync works immediately in both the online Google view and Offline Field View. For another deployment, replace the demonstration browser key and follow the restrictions below:
+TerraSync works immediately in both the online Google view and downloaded Offline Street Map. For another deployment, replace the demonstration browser key and follow the restrictions below:
 
 1. Follow the instructions in [docs/google-maps-setup.md](docs/google-maps-setup.md) to obtain and restrict a Google Maps API key.
 2. Open `src/config.js` and set your key:
