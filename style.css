@@ -109,9 +109,11 @@ header {
 
 .cloud-auth-modal { max-width: 560px; }
 .cloud-help { color: var(--text-secondary); line-height: 1.5; margin-bottom: 1rem; }
-.cloud-config-panel { background: var(--bg-base); border: 1px solid var(--border-glow); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
-.cloud-config-panel h4 { margin-bottom: 0.75rem; }
 .cloud-auth-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.google-auth-button { background: #fff; border: 1px solid #dadce0; color: #3c4043; font-weight: 600; }
+.google-auth-button:hover { background: #f8fafd; border-color: #c7cbd1; }
+.google-auth-button svg { width: 18px; height: 18px; flex: 0 0 18px; }
+.cloud-privacy-note { margin-top: 0.75rem; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.45; }
 .private-window-warning { margin-top: 1rem; padding: 0.75rem; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; color: #9a3412; font-size: 0.8rem; line-height: 1.4; }
 
 /* Toggle Switch */

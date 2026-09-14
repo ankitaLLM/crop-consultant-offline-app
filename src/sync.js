@@ -92,18 +92,14 @@
       localStorage.setItem('terrasync_supabase_publishable_key', cleanKey);
     }
 
-    async signIn(email, password) {
+    async signInWithGoogle() {
       if (!this.client) throw new Error('Configure Supabase first.');
-      const { error } = await this.client.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    }
-
-    async signUp(email, password) {
-      if (!this.client) throw new Error('Configure Supabase first.');
-      const { error } = await this.client.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: `${location.origin}${location.pathname}` }
+      const { error } = await this.client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${location.origin}${location.pathname}`,
+          scopes: 'openid email profile'
+        }
       });
       if (error) throw error;
     }
@@ -235,6 +231,8 @@
       if (authButton) authButton.textContent = this.user ? 'Cloud account' : 'Connect cloud';
       const signOut = document.getElementById('cloudSignOutBtn');
       if (signOut) signOut.hidden = !this.user;
+      const googleSignIn = document.getElementById('cloudGoogleSignInBtn');
+      if (googleSignIn) googleSignIn.hidden = Boolean(this.user);
       if (app.lastSyncedEl && app.lastSyncedTimestamp) {
         app.lastSyncedEl.textContent = `Cloud synchronized ${app.lastSyncedTimestamp.toLocaleString()} · newest change wins`;
       } else if (app.lastSyncedEl) {

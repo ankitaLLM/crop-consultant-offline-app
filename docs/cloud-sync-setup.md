@@ -7,7 +7,9 @@ TerraSync supports authenticated, cross-browser synchronization through Supabase
 1. Create a Supabase project.
 2. Open **SQL Editor**, paste `supabase/schema.sql`, and run it once.
 3. In **Authentication → URL Configuration**, set the Site URL to `https://ankitallm.github.io/crop-consultant-offline-app/` and add the same URL as an allowed redirect URL.
-4. In **Authentication → Providers → Email**, enable email/password authentication. Decide whether new accounts require email confirmation.
+4. In Google Auth Platform, create a **Web application** OAuth client. Use `https://ankitallm.github.io` as the authorized JavaScript origin and `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback` as the authorized redirect URI.
+5. Set the Google OAuth audience to **External** for a public prototype. Request only the basic `openid`, `email`, and `profile` scopes.
+6. In **Supabase → Authentication → Sign In / Providers → Google**, enable Google and securely enter the OAuth Client ID and Client Secret. Never put the Client Secret in this repository.
 
 ## 2. Configure the public web client
 
@@ -26,7 +28,7 @@ The browser key is intentionally public. Security comes from authentication, gra
 
 1. Deploy the updated site.
 2. Open TerraSync in Chrome and select **Connect cloud**.
-3. Create an account or sign in.
+3. Select **Continue with Google** and approve the basic identity request.
 4. Add an observation and a field document, then select **Sync now**.
 5. Open TerraSync in Edge, Safari, or another device and sign in with the same account.
 6. The same observations and documents should download after sign-in.

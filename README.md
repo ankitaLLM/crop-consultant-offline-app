@@ -34,7 +34,7 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 - Service Worker `v9` caching the application core while explicitly excluding map tiles and API responses.
 
 ### 5. Authenticated Cross-Browser Cloud Sync
-- Optional Supabase email/password authentication and user-scoped PostgreSQL storage.
+- Google authentication through Supabase and user-scoped PostgreSQL storage.
 - Observations and recommendation/sales documents save locally first, then synchronize automatically when online.
 - The same signed-in user can retrieve records in Chrome, Edge, Safari, private browsing, or another device.
 - Newest-change-wins conflict protection runs both in the client and database; cloud status is shown only after a server acknowledgement.

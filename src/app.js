@@ -521,15 +521,12 @@ class TerraSyncApp {
 
     const cloudAuthBtn = document.getElementById('cloudAuthBtn');
     const closeCloudAuthBtn = document.getElementById('closeCloudAuthBtn');
-    const cloudAuthForm = document.getElementById('cloudAuthForm');
     const cloudStatus = document.getElementById('cloudAuthStatus');
     const openCloudDialog = () => {
-      document.getElementById('supabaseUrlInput').value = this.cloud?.config?.url || '';
-      document.getElementById('supabaseKeyInput').value = this.cloud?.config?.publishableKey || '';
       this.cloudAuthModal.classList.add('open');
       this.cloudAuthModal.inert = false;
       this.cloudAuthModal.setAttribute('aria-hidden', 'false');
-      document.getElementById(this.cloud?.signedIn ? 'cloudSignOutBtn' : 'cloudEmailInput').focus();
+      document.getElementById(this.cloud?.signedIn ? 'cloudSignOutBtn' : 'cloudGoogleSignInBtn').focus();
     };
     const closeCloudDialog = () => {
       this.cloudAuthModal.classList.remove('open');
@@ -542,32 +539,11 @@ class TerraSyncApp {
     this.cloudAuthModal.addEventListener('click', event => {
       if (event.target === this.cloudAuthModal) closeCloudDialog();
     });
-    document.getElementById('saveCloudConfigBtn').addEventListener('click', () => {
+    document.getElementById('cloudGoogleSignInBtn').addEventListener('click', async () => {
+      cloudStatus.textContent = 'Opening Google sign-in…';
       try {
-        this.cloud.saveConfiguration(document.getElementById('supabaseUrlInput').value,
-          document.getElementById('supabaseKeyInput').value);
-        cloudStatus.textContent = 'Connection saved. Reloading TerraSync…';
-        location.reload();
-      } catch (error) { cloudStatus.textContent = error.message; }
-    });
-    cloudAuthForm.addEventListener('submit', async event => {
-      event.preventDefault();
-      cloudStatus.textContent = 'Signing in…';
-      try {
-        await this.cloud.signIn(document.getElementById('cloudEmailInput').value,
-          document.getElementById('cloudPasswordInput').value);
-        cloudStatus.textContent = 'Signed in. Synchronizing your records…';
-        await this.cloud.sync();
-      } catch (error) { cloudStatus.textContent = `Sign-in failed: ${error.message}`; }
-    });
-    document.getElementById('cloudSignUpBtn').addEventListener('click', async () => {
-      if (!cloudAuthForm.reportValidity()) return;
-      cloudStatus.textContent = 'Creating account…';
-      try {
-        await this.cloud.signUp(document.getElementById('cloudEmailInput').value,
-          document.getElementById('cloudPasswordInput').value);
-        cloudStatus.textContent = 'Account created. Check your email if confirmation is enabled, then sign in.';
-      } catch (error) { cloudStatus.textContent = `Account creation failed: ${error.message}`; }
+        await this.cloud.signInWithGoogle();
+      } catch (error) { cloudStatus.textContent = `Google sign-in failed: ${error.message}`; }
     });
     document.getElementById('cloudSignOutBtn').addEventListener('click', async () => {
       try {
