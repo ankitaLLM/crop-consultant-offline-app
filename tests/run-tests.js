@@ -11,6 +11,7 @@ const testFiles = [
   path.join(__dirname, 'location-service.test.js'),
   path.join(__dirname, 'map-controller.test.js'),
   path.join(__dirname, 'sync.test.js'),
+  path.join(__dirname, 'backup.test.js'),
   path.join(__dirname, 'release-integrity.test.js')
 ];
 

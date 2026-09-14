@@ -75,13 +75,13 @@ window.TERRASYNC_CONFIG = {
 
 ---
 
-## 6. Offline and Zero-Key Fallback
+## 6. Offline Field Pack and Fallback
 
 If no API key is provided, or if the device is offline, or if Google servers cannot be reached:
 - TerraSync **automatically falls back** to the built-in **Offline Field View**.
-- Field polygons, crop identification, and observation pins are rendered with high contrast against a neutral agronomic background.
-- A prominent status banner displays: *"Field boundaries only — basemap unavailable"*.
-- **No external map tiles (Google or OSM) are requested or cached**, ensuring 100% compliance with provider terms and reliable operation in zero-coverage fields.
+- Field polygons, crop identification, observation pins, GPS position, and tracks are rendered with high contrast against a built-in agronomic background.
+- Select **Save field map offline** once while connected to explicitly save all demonstration field geometry and required local map assets on that device.
+- **No Google or OpenStreetMap tiles are requested or cached for offline use**, ensuring provider-policy compliance and reliable operation in zero-coverage fields.
 
 ---
 

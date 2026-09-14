@@ -37,7 +37,7 @@ node --test tests/map-controller.test.js
 1. Open TerraSync in your browser (`http://localhost:8080`).
 2. Without a Google Maps API key configured in `src/config.js`, verify:
    - The map displays a neutral, high-contrast agronomic background (`#0d1520`).
-   - A distinct banner appears across the map header: **"Field boundaries only — basemap unavailable"**.
+   - A distinct banner appears across the map header: **"Offline field map · boundaries and observations"**.
    - Grower field polygons are drawn in distinct crop colors (Corn: Amber, Soybeans: Emerald, Wheat: Purple).
    - Clicking on any field highlights the polygon and loads the diagnostic dashboard in the right panel.
    - Inspect browser network tab: confirm **zero** tile requests to external tile servers.

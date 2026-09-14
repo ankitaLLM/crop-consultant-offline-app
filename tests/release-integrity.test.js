@@ -27,11 +27,15 @@ test('Release integrity: service-worker core entries exist', () => {
   }
 });
 
-test('Release integrity: removed map-download controls are not referenced', () => {
+test('Release integrity: manual offline map and data restore controls are wired', () => {
+  const html = read('index.html');
   const app = read('src/app.js');
-  for (const staleId of ['downloadMapBtn', 'downloadProgressBar', 'downloadProgressFill', 'downloadStatusText']) {
-    assert.equal(app.includes(staleId), false, `Stale removed control referenced: ${staleId}`);
-  }
+  const drafts = read('src/drafts.js');
+  assert.match(html, /id="downloadOfflineMapBtn"/);
+  assert.match(html, /id="importBackupInput"/);
+  assert.match(app, /downloadOfflineMapPack/);
+  assert.match(drafts, /importBackupFile/);
+  assert.doesNotMatch(html, /id="googleApiKeyInput"/);
 });
 
 test('Release integrity: privacy and terms links are public pages', () => {

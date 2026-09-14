@@ -12,8 +12,8 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 ## Core Capabilities (Release 1)
 
 ### 1. Hybrid Map Architecture: Online Google Maps + Offline Field View
-- **Google Maps Integration**: When online and configured with an API key, renders Google Maps with hybrid satellite/road views, custom severity pins, and official Google terms and attribution.
-- **Zero-Network Offline Field View**: When offline or if no API key is supplied, automatically falls back to an offline field view. Field boundaries and observation markers are rendered against a neutral, high-contrast canvas with a clear *"Field boundaries only — basemap unavailable"* banner. **Zero external map tiles are downloaded or cached**, ensuring 100% compliance with provider terms and reliable operation with no network.
+- **Google Maps Integration**: The hosted demonstration includes a public, referrer-restricted browser key and renders Google's road, satellite, and hybrid controls online, with custom severity pins and official terms and attribution.
+- **Manual Offline Field Pack**: **Save field map offline** stores the application map assets and marks all seven demonstration field records as ready on that device. Offline mode renders field boundaries, labels, observations, GPS position, and tracks against a built-in vector background. **No Google or OpenStreetMap tiles are downloaded or cached for offline use**, in accordance with provider rules.
 - **Graceful Error Recovery**: Automatically switches to the offline field view if Google Maps scripts fail to load or are blocked, preserving all field selections and observation state.
 
 ### 2. Real Device Geolocation & Proximity
@@ -30,8 +30,8 @@ https://ankitallm.github.io/crop-consultant-offline-app/
 ### 4. Resilient Offline Drafting & Document Generation
 - Autosaved recommendation and sales drafts with transaction confirmation and conflicting-tab protection.
 - Printable draft estimates with agronomic and pricing disclaimers.
-- JSON backup export of device records.
-- Service Worker `v9` caching the application core while explicitly excluding map tiles and API responses.
+- JSON backup export and validated restore of device records.
+- Service Worker `v12` caching the application core while explicitly excluding Google and OpenStreetMap tiles and API responses.
 
 ### 5. Authenticated Cross-Browser Cloud Sync
 - Google authentication through Supabase and user-scoped PostgreSQL storage.
@@ -46,7 +46,7 @@ Setup is required before cloud sync becomes active. See [docs/cloud-sync-setup.m
 
 ## Configuration & Google Maps Setup
 
-TerraSync works immediately out-of-the-box in the Offline Field View without any configuration. To enable online Google Maps imagery:
+TerraSync works immediately in both the online Google view and Offline Field View. For another deployment, replace the demonstration browser key and follow the restrictions below:
 
 1. Follow the instructions in [docs/google-maps-setup.md](docs/google-maps-setup.md) to obtain and restrict a Google Maps API key.
 2. Open `src/config.js` and set your key:

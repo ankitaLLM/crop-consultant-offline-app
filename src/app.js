@@ -30,6 +30,11 @@ class TerraSyncApp {
     this.manualSyncBtn = document.getElementById('manualSyncBtn');
     this.offlineBanner = document.getElementById('offlineBanner');
     this.cloudAuthModal = document.getElementById('cloudAuthModal');
+    this.downloadOfflineMapBtn = document.getElementById('downloadOfflineMapBtn');
+    this.offlineMapStatus = document.getElementById('offlineMapStatus');
+    this.importBackupBtn = document.getElementById('importBackupBtn');
+    this.importBackupInput = document.getElementById('importBackupInput');
+    this.installAppBtn = document.getElementById('installAppBtn');
     
     // Map overlay & location elements
     this.locateMeBtn = document.getElementById('locateMeBtn');
@@ -90,14 +95,10 @@ class TerraSyncApp {
     this.calcTotalQty = document.getElementById('calcTotalQty');
     this.calcTotalCost = document.getElementById('calcTotalCost');
 
-    // Map API Key / Provider settings
+    // Map availability details
     this.apiKeyModal = document.getElementById('apiKeyModal');
     this.configureMapApiKeyBtn = document.getElementById('configureMapApiKeyBtn');
     this.closeApiKeyModalBtn = document.getElementById('closeApiKeyModalBtn');
-    this.apiKeyForm = document.getElementById('apiKeyForm');
-    this.googleApiKeyInput = document.getElementById('googleApiKeyInput');
-    this.enableOsmBasemapToggle = document.getElementById('enableOsmBasemapToggle');
-    this.clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
     this.mapProviderBadge = document.getElementById('mapProviderBadge');
     
     // State variables
@@ -128,6 +129,7 @@ class TerraSyncApp {
     this.syncInProgress = false;
     this.toastTimeout = null;
     this.lastSyncedTimestamp = null;
+    this.deferredInstallPrompt = null;
   }
 
   /**
@@ -156,6 +158,7 @@ class TerraSyncApp {
       this.renderConsultantHeader();
       this.populateModalDropdowns();
       this.populateGrowerDropdown();
+      this.updateOfflineMapStatus();
 
       // 7. Refresh local queues
       await this.refreshSyncQueueUI();
@@ -505,6 +508,34 @@ class TerraSyncApp {
     });
     window.addEventListener('offline', () => this.updateOnlineStatus());
     document.getElementById('exportEditorBtn').addEventListener('click', () => this.drafts.exportBackup());
+    this.importBackupBtn?.addEventListener('click', () => this.importBackupInput?.click());
+    this.importBackupInput?.addEventListener('change', async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        const result = await this.drafts.importBackupFile(file);
+        this.showToast(`Restored ${result.drafts} documents and ${result.observations} observations.`, false);
+      } catch (error) {
+        this.showToast(error.message || 'That backup could not be restored.', true);
+      } finally {
+        event.target.value = '';
+      }
+    });
+    this.downloadOfflineMapBtn?.addEventListener('click', () => this.downloadOfflineMapPack());
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      this.deferredInstallPrompt = event;
+      if (this.installAppBtn) this.installAppBtn.hidden = false;
+    });
+    this.installAppBtn?.addEventListener('click', async () => {
+      if (!this.deferredInstallPrompt) {
+        this.showToast('Use your browser menu and choose Install app or Add to Home Screen.', false);
+        return;
+      }
+      await this.deferredInstallPrompt.prompt();
+      this.deferredInstallPrompt = null;
+      this.installAppBtn.hidden = true;
+    });
     document.getElementById('protectStorageBtn').addEventListener('click', async () => {
       const status = document.getElementById('storageProtectionStatus');
       try {
@@ -552,7 +583,6 @@ class TerraSyncApp {
       } catch (error) { cloudStatus.textContent = `Sign-out failed: ${error.message}`; }
     });
 
-    // Cache Map tiles
     // Device Location controls
     if (this.locateMeBtn) {
       this.locateMeBtn.addEventListener('click', () => this.handleLocateMe());
@@ -620,7 +650,7 @@ class TerraSyncApp {
       });
     }
 
-    // Map API Key / Provider modal listeners
+    // Map availability modal listeners
     if (this.configureMapApiKeyBtn) {
       this.configureMapApiKeyBtn.addEventListener('click', () => {
         this.openApiKeyModal();
@@ -631,39 +661,7 @@ class TerraSyncApp {
         this.closeApiKeyModal();
       });
     }
-    if (this.clearApiKeyBtn) {
-      this.clearApiKeyBtn.addEventListener('click', async () => {
-        if (this.googleApiKeyInput) this.googleApiKeyInput.value = '';
-        if (this.mapController) {
-          await this.mapController.setGoogleMapsApiKey('');
-        }
-        this.showToast('Google Maps API key cleared.', false);
-        this.closeApiKeyModal();
-      });
-    }
-    if (this.apiKeyForm) {
-      this.apiKeyForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const key = this.googleApiKeyInput?.value.trim() || '';
-        if (this.mapController) {
-          await this.mapController.setGoogleMapsApiKey(key);
-        }
-        if (key) {
-          this.showToast('Google Maps key applied.', false);
-        } else {
-          this.showToast('Using standard offline/OpenStreetMap adapter.', false);
-        }
-        this.closeApiKeyModal();
-      });
-    }
-    if (this.enableOsmBasemapToggle) {
-      this.enableOsmBasemapToggle.addEventListener('change', (e) => {
-        if (this.mapController?.activeAdapter?.setBasemapEnabled) {
-          this.mapController.activeAdapter.setBasemapEnabled(e.target.checked);
-        }
-      });
-    }
-
+    document.getElementById('closeApiKeyModalBtn2')?.addEventListener('click', () => this.closeApiKeyModal());
     // ESC key closes modals
     document.addEventListener('keydown', (e) => {
       const dialog = [this.recDetailOverlay, this.recModal, this.scoutingModal, this.apiKeyModal].find(el => el?.classList.contains('open') || el?.style.display === 'flex');
@@ -684,16 +682,45 @@ class TerraSyncApp {
 
   openApiKeyModal() {
     if (!this.apiKeyModal) return;
-    const currentKey = this.config.googleMapsApiKey || (typeof localStorage !== 'undefined' && localStorage.getItem('terrasync_google_maps_api_key')) || '';
-    if (this.googleApiKeyInput) {
-      this.googleApiKeyInput.value = currentKey;
-    }
     this.apiKeyModal.style.display = 'flex';
   }
 
   closeApiKeyModal() {
     if (!this.apiKeyModal) return;
     this.apiKeyModal.style.display = 'none';
+  }
+
+  updateOfflineMapStatus() {
+    if (!this.offlineMapStatus) return;
+    const ready = this.fields.filter(field => field.cachedMap).length;
+    this.offlineMapStatus.textContent = ready === this.fields.length && ready > 0
+      ? `Offline field map ready · ${ready} fields`
+      : `Offline field map not saved · ${ready}/${this.fields.length} fields`;
+  }
+
+  async downloadOfflineMapPack() {
+    if (!this.downloadOfflineMapBtn) return;
+    this.downloadOfflineMapBtn.disabled = true;
+    this.downloadOfflineMapBtn.textContent = 'Saving field map…';
+    try {
+      if (!navigator.onLine) throw new Error('Connect once to save the offline field map.');
+      if ('caches' in window) {
+        const cache = await caches.open('terrasync-manual-field-pack-v1');
+        const paths = ['index.html', 'style.css?v=12', 'src/data.js',
+          'src/maps/offline-field-adapter.js?v=12', 'src/maps/map-adapter.js?v=8', 'assets/icon.svg'];
+        await cache.addAll(paths.map(path => new Request(new URL(path, location.href), { cache: 'reload' })));
+      }
+      const savedAt = new Date().toISOString();
+      await Promise.all(this.fields.map(field => this.db.put('fields', { ...field, cachedMap: true, cachedMapAt: savedAt })));
+      await this.loadStateFromDB();
+      this.updateOfflineMapStatus();
+      this.showToast(`Offline field map saved for all ${this.fields.length} demo fields.`, false);
+    } catch (error) {
+      this.showToast(error.message || 'Offline field map could not be saved.', true);
+    } finally {
+      this.downloadOfflineMapBtn.disabled = false;
+      this.downloadOfflineMapBtn.textContent = 'Save field map offline';
+    }
   }
 
   updateMapProviderBadge(type) {

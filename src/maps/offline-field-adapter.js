@@ -6,7 +6,7 @@
  * 1. Zero network basemap tile calls: Never fetches OpenStreetMap, Google, or third-party tiles.
  * 2. Neutral background canvas: Clearly presents saved grower field boundaries, labels,
  *    observation pins, device location, accuracy circle, and tracks.
- * 3. Prominently displays: "Field boundaries only — basemap unavailable."
+ * 3. Prominently identifies the locally saved field map.
  * 4. Dual rendering engine: Uses local Leaflet instance without tileLayer when Leaflet is available;
  *    gracefully falls back to pure SVG vector rendering if Leaflet is unavailable.
  */
@@ -68,6 +68,7 @@
       this.mapPannedCallback = null;
 
       this.offlineBanner = null;
+      this.offlineLegend = null;
     }
 
     async mount(container) {
@@ -115,9 +116,13 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
         </svg>
-        <span>Field boundaries only — basemap unavailable</span>
+        <span>Offline field map · boundaries and observations</span>
       `;
       this.container.appendChild(this.offlineBanner);
+      this.offlineLegend = document.createElement('div');
+      this.offlineLegend.className = 'offline-field-legend';
+      this.offlineLegend.innerHTML = '<strong>Saved on this device</strong><span>Field outlines · crop color · scouting pins · GPS track</span>';
+      this.container.appendChild(this.offlineLegend);
     }
 
     _updateBasemapLayer(overrideOnline) {
@@ -142,6 +147,7 @@
         if (this.offlineBanner) {
           this.offlineBanner.style.display = 'none';
         }
+        if (this.offlineLegend) this.offlineLegend.style.display = 'none';
       } else {
         if (this.tileLayer) {
           this.map.removeLayer(this.tileLayer);
@@ -150,6 +156,7 @@
         if (this.offlineBanner) {
           this.offlineBanner.style.display = 'flex';
         }
+        if (this.offlineLegend) this.offlineLegend.style.display = 'flex';
       }
     }
 

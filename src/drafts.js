@@ -16,6 +16,21 @@ function priceDraft(draft, products) {
       draft.category === 'chemicals' ? 'Crop protection estimate' : 'Seed estimate' };
 }
 
+function parseBackupPayload(text) {
+  let payload;
+  try { payload = JSON.parse(text); } catch { throw new Error('This is not a valid TerraSync JSON backup.'); }
+  if (!payload || payload.format !== 'terrasync-local-backup' || payload.version !== 1) {
+    throw new Error('Choose a TerraSync backup file created by Download data backup.');
+  }
+  if (!Array.isArray(payload.drafts) || !Array.isArray(payload.observations)) {
+    throw new Error('The backup is incomplete: documents or observations are missing.');
+  }
+  if (payload.drafts.length + payload.observations.length > 5000) {
+    throw new Error('The backup contains too many records for this prototype.');
+  }
+  return payload;
+}
+
 class DraftWorkspace {
   constructor(app) {
     this.app = app;
@@ -241,7 +256,42 @@ class DraftWorkspace {
       this.app.showToast('Backup download requested. Keep the file safe; it contains your local work.', false);
     } catch (error) { this.app.showToast('Could not export backup. Your local records were not changed.', true); }
   }
+
+  async importBackupFile(file) {
+    if (!file || typeof file.text !== 'function') throw new Error('Choose a TerraSync JSON backup file.');
+    if (file.size > 5 * 1024 * 1024) throw new Error('The backup is larger than the 5 MB prototype limit.');
+    const payload = parseBackupPayload(await file.text());
+    const ownerId = this.app.cloud?.user?.id || null;
+    const restore = async (store, records) => {
+      let restored = 0;
+      for (const source of records) {
+        if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+        const id = String(source.id || '').trim();
+        if (!id) continue;
+        const existing = await this.db.get(store, id);
+        const sourceTime = Date.parse(source.updatedAt || source.createdAt || '') || 0;
+        const existingTime = Date.parse(existing?.updatedAt || existing?.createdAt || '') || 0;
+        if (existing && existingTime > sourceTime) continue;
+        await this.db.put(store, { ...source, id, cloudOwnerId: ownerId, syncStatus: 'pending',
+          updatedAt: source.updatedAt || source.createdAt || new Date().toISOString() });
+        restored++;
+      }
+      return restored;
+    };
+    const drafts = await restore('drafts', payload.drafts);
+    const observations = await restore('scoutingLogs', payload.observations);
+    await this.app.loadStateFromDB();
+    await this.render();
+    if (this.app.selectedFieldId) {
+      const field = this.app.fields.find(item => item.id === this.app.selectedFieldId);
+      if (field) await this.app.loadFieldObservations(field);
+    }
+    if (drafts) window.dispatchEvent(new CustomEvent('terrasync-local-change', { detail: { entityType: 'draft' } }));
+    if (observations) window.dispatchEvent(new CustomEvent('terrasync-local-change', { detail: { entityType: 'observation' } }));
+    if (this.app.cloud?.signedIn && navigator.onLine) this.app.cloud.sync();
+    return { drafts, observations };
+  }
 }
 
 window.DraftWorkspace = DraftWorkspace;
-window.TerraSyncDrafts = { priceDraft, escapeHTML: escapeDraftHTML };
+window.TerraSyncDrafts = { priceDraft, escapeHTML: escapeDraftHTML, parseBackupPayload };
