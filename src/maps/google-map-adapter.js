@@ -82,6 +82,10 @@
 
       window[callbackName] = () => {
         if (settled) return;
+        if (!window.google?.maps) {
+          fail(new Error('Google Maps did not initialize. Check that this site is allowed by the API key restrictions.'));
+          return;
+        }
         settled = true;
         clearTimeout(timeoutTimer);
         delete window[callbackName];

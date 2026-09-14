@@ -36,6 +36,7 @@ test('Release integrity: manual offline map and data restore controls are wired'
   assert.match(app, /downloadOfflineMapPack/);
   assert.match(drafts, /importBackupFile/);
   assert.doesNotMatch(html, /id="googleApiKeyInput"/);
+  assert.match(read('src/maps/google-map-adapter.js'), /if \(!window\.google\?\.maps\)/);
 });
 
 test('Release integrity: privacy and terms links are public pages', () => {
